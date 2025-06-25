@@ -1,96 +1,194 @@
+/*
+
+Basado en la documentacion: https://docs.python.org/3/reference/lexical_analysis.html#
+
+Python Keywords:
+False      await      else       import     pass
+None       break      except     in         raise
+True       class      finally    is         return
+and        continue   for        lambda     try
+as         def        from       nonlocal   while
+assert     del        global     not        with
+async      elif       if         or         yield
+
+Python Operators:
++       -       *       **      /       //      %      @
+<<      >>      &       |       ^       ~       :=
+<       >       <=      >=      ==      !=
+
+*/
+
 %{
-    #include <stdio.h>
-    #include <stdlib.h>
-    #include <string.h>
-    /*
-    FALSE, CLASS, FINALLY, IS, RETURN, NONE, FOR, LAMBDA, TRY, TRUE,
-    DEF, FROM, NONLOCAL, WHILE, AND, DEL, GLOBAL, NOT, WITH, AS, ELIF,
-    IF, OR, YIELD, ASSERT, ELSE, IMPORT, PASS, BREAK, EXCEPT, IN, RAISE,
-    NEWLINE, INDENT, DEDENT
-    */
+#include <iostream>
+#include <stack>
+#include <cstdlib>
+#include <string.h>
+#include "parser.hpp"
+YYSTYPE yylval;
+YYLTYPE yylloc;
 
-    #define INDENT_STACK_SIZE 100
-    #define STRBUF_SIZE 4096
+yypstate* pstate = yypstate_new();
 
-    int indent_stack[INDENT_STACK_SIZE];
-    int indent_top = 0;
-    int at_line_start = 1;
-    char strbuf[STRBUF_SIZE];
+#define PUSH_TOKEN(token) do {  \
+  int s = yypush_parse(pstate, token, &yylval, &yylloc);  \
+  if (s != YYPUSH_MORE) {                                 \
+    yypstate_delete(pstate);                              \
+    return s;                                             \
+  }                                                       \
+} while(0)
 
-    /* Funcion para calcular el nivel de indentacion */
-    int compute_indent_level(const char *s) {
-        int col = 0;
-        for(; *s; ++s) {
-            if(*s == ' ')                       // Espacios suman 1 a la indentacion
-                col += 1;
-            else if (*s == '\t')                // Las tabulaciones suman de 1 a 8 de modo que la suma sea multiplo de 8
-                col += 8 - (col%8);
-            else break;
-        }
-        return col;
-    }
 
-    /* Funcion que evalua si se crea una aumenta o disminuye una indentacion */
-    void emit_indent_dedent(int new_indent) {
-        int current_indent = indent_stack[indent_top];
-
-        if(new_indent > current_indent) {
-            indent_stack[++indent_top] = new_indent;
-            printf("INDENT\n");
-        } else if (new_indent < current_indent) {
-            while (indent_top > 0 && new_indent < indent_stack[indent_top]) {
-                indent_top--;
-                printf("DEDENT\n");
-            }
-            if (new_indent != indent_stack[indent_top]) {
-                fprintf(stderr, "Error on line %d: unexpected indent level %d\n", yylineno, new_indent);
-                exit(1);
-            }
-        }
-    }
-
-    void strbuf_init(){
-        strbuf[0]='\0';
-    }
-
-    void strbuf_append(const char *s){
-        if(strlen(strbuf)+strlen(s)>=STRBUF_SIZE) {
-            fprintf(stderr, "Error on line %d: string literal exceeds maximum allowed size (max %d bytes)\n", yylineno, STRBUF_SIZE);
-        }
-
-        strcat(strbuf, s);
-    }
+int comment_start_line;
+std::stack<int> _indent_stack;
 %}
 
 %option noyywrap
-%x STRING
-
-/* Definiciones Regulares */
+%option yylineno
+%x COMMENT
 
 %%
 
+%{
+  /**/
+  if (_indent_stack.empty()) {
+    _indent_stack.push(0);
+  }
+%}
 
-^[ \t]* {                                                       /* Manejo de espacios y tabulaciones */
-    if(at_line_start) {                                         /* Indentación al comienzo de la linea */
-        int level = compute_indent_level(yytext);
-        emit_indent_dedent(level);
-        at_line_start = 0;   
-    }                                                           /* Caso contrario se ignoran los espacios */ 
+(\"\"\")           { BEGIN(COMMENT); comment_start_line = yylineno; }
+
+<COMMENT>{
+(\"\"\")           { BEGIN(INITIAL); } // Fin del comentario
+\n               { /* Ignorar saltos de línea dentro del comentario */ }
+.                { /* Ignorar cualquier otro carácter dentro del comentario */ }
+<<EOF>>          { 
+                   std::cerr << "Error: Comentario multilínea sin cerrar. Iniciado en la línea " 
+                             << comment_start_line << std::endl;
+                   yyterminate();
+                 }
 }
 
-\\\n    ;                                                       /* El uso de \ en Python significa la union explicita de lineas,
-                                                                entonces se ignora el salto de linea que le sigue*/
-        
+^[ \t]*\r?\n   { /* Ignoramos lineas en blanco */ }
+^[ \t]*#.*\r?\n    { /* Ignoramos comentarios en una linea fisica */ }
+#.*$        { /* Ignoramos comentarios que estan dps de un statement */ }
 
-\"      { strbuf_init(); BEGIN(STRING);}                        /* Manejo de cadenas encerradas en "" */
 
-<STRING>[^\"\\\n]+  { strbuf_append(yytext);}                   /* Cualquier símbolo menos ", \ y \n */
-<STRING>\\.         { strbuf_append(yytext);}                   /* Manejo de caracteres de escape en la cadena(\n, \t, etc) */
-<STRING>\\\n        ;                                          /* Uso de \ para la union explicita de lineas */
-<STRING>\"          { printf("%s\n", strbuf); BEGIN(INITIAL);}  /* Final de una cadena */
-<STRING>\n          { printf("Error: unterminated string\n");}  /*Cadena mal terminada (sin comilla al final) */
+^[ \t]+     {
+              /**/
+              if (_indent_stack.top() < yyleng) {
+                /**/
+                //std::cout << "INDENT" << std::endl;
+                _indent_stack.push(yyleng);
+                PUSH_TOKEN((yylval.token = INDENT));
+              } else {
+                /**/
+                while (!_indent_stack.empty() && _indent_stack.top() != yyleng) {
+                  _indent_stack.pop();
+                  //std::cout << "DEDENT" << std::endl;
+                  PUSH_TOKEN((yylval.token = DEDENT));
+                }
 
-\#.*                ;                                           /* Manejo de comentarios */
-\r\n|\n|\r          { at_line_start = 1; printf("NEWLINE\n");}  /* Salto de linea */
+                /**/
+                if (_indent_stack.empty()) {
+                  std::cerr << "Error: Incorrect indentation on line "
+                    << yylineno << std::endl;
+                  return 1;
+                  exit(1);
+                }
+              }
+            }
+
+^[^ \t\n]+  {
+              /**/
+              while(_indent_stack.top() != 0) {
+                _indent_stack.pop();
+                //std::cout << "DEDENT" << std::endl;
+                PUSH_TOKEN((yylval.token = DEDENT));
+              }
+              REJECT;
+            }
+
+\r?\n       {
+                PUSH_TOKEN((yylval.token = NEWLINE)); 
+                //std::cout << "NEWLINE" << std::endl;
+            }
+
+<<EOF>>     {
+              /**/
+              while(_indent_stack.top() != 0) {
+                _indent_stack.pop();
+                //std::cout << "DEDENT" << std::endl;
+                PUSH_TOKEN((yylval.token = DEDENT));
+              }
+
+              int s = yypush_parse(pstate, 0, NULL, NULL);
+                yypstate_delete(pstate);
+                return s;
+              //yyterminate();
+            }
+
+[ \t]       { /* Ignoramos espacios blancos que no sean los de arriba */ }
+
+"and"       { PUSH_TOKEN((yylval.token = AND));}
+"break"     { PUSH_TOKEN((yylval.token = BREAK));}
+"def"       { PUSH_TOKEN((yylval.token = DEF));}
+"elif"      { PUSH_TOKEN((yylval.token = ELIF));}
+"else"      { PUSH_TOKEN((yylval.token = ELSE));}
+"for"       { PUSH_TOKEN((yylval.token = FOR));}
+"if"        { PUSH_TOKEN((yylval.token = IF));}
+"not"       { PUSH_TOKEN((yylval.token = NOT));}
+"or"        { PUSH_TOKEN((yylval.token = OR));}
+"return"    { PUSH_TOKEN((yylval.token = RETURN));}
+"while"     { PUSH_TOKEN((yylval.token = WHILE));}
+"True"      { yylval.str = new std::string("true", yyleng);
+              PUSH_TOKEN(TBOOLEAN);}
+"False"     { yylval.str = new std::string("false", yyleng);
+              PUSH_TOKEN(FBOOLEAN);}
+"for"       { PUSH_TOKEN((yylval.token = FOR));}
+"in"        { PUSH_TOKEN((yylval.token = IN));}
+"range"     { PUSH_TOKEN((yylval.token = RANGE));}
+"def"       { PUSH_TOKEN((yylval.token = DEF));}
+"print"     { PUSH_TOKEN((yylval.token = PRINT));}
+
+[A-Z][A-Z0-9_]*           {yylval.str = new std::string(yytext, yyleng);
+                          PUSH_TOKEN(CONSTANT);}
+
+[a-zA-Z_][a-zA-Z0-9_]*  {yylval.str = new std::string(yytext, yyleng);
+                        PUSH_TOKEN(IDENTIFIER);}
+
+-?[0-9]*\.[0-9]{1,7}   {yylval.str = new std::string(yytext, yyleng);
+                        PUSH_TOKEN(FLOAT);}
+
+-?[0-9]*"."[0-9]+       {yylval.str = new std::string(yytext, yyleng);
+                        PUSH_TOKEN(DOUBLE);}
+
+-?[0-9]+                {yylval.str = new std::string(yytext, yyleng);
+                        PUSH_TOKEN(INTEGER);}
+
+(\"[^\"]+\")            {yylval.str = new std::string(yytext, yyleng);
+                        PUSH_TOKEN(STRING);}
+
+(\'[^\']\')                  {yylval.str = new std::string(yytext, yyleng);
+                              PUSH_TOKEN(CHAR);}
+
+"="         { PUSH_TOKEN((yylval.token = EQUALS));} 
+"+"         { PUSH_TOKEN((yylval.token = PLUS));}
+"-"         {  PUSH_TOKEN((yylval.token = MINUS)); }
+"*"         {  PUSH_TOKEN((yylval.token = TIMES));}
+"/"         {  PUSH_TOKEN((yylval.token = DIVIDEDBY));}
+"=="        { PUSH_TOKEN((yylval.token = EQ));}
+"!="        { PUSH_TOKEN((yylval.token = NEQ));}
+">"         { PUSH_TOKEN((yylval.token = GT));}
+">="        { PUSH_TOKEN((yylval.token = GTE));}
+"<"         { PUSH_TOKEN((yylval.token = LT));}
+"<="        { PUSH_TOKEN((yylval.token = LTE));}
+"("         { PUSH_TOKEN((yylval.token = LPAREN));}
+")"         { PUSH_TOKEN((yylval.token = RPAREN));}
+","         {  PUSH_TOKEN((yylval.token = COMMA));}
+":"         { PUSH_TOKEN((yylval.token = COLON));}
+"["         { PUSH_TOKEN((yylval.token = LBRACK));}
+"]"         { PUSH_TOKEN((yylval.token = RBRACK));}
+
+.           { PUSH_TOKEN((yylval.token = UNKNOWN));}
 
 %%
