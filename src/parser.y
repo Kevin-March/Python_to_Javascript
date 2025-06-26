@@ -4,6 +4,9 @@
 #include <vector>
 #include <sstream>
 #include "symbol_table.hpp"
+#include "type_checker.hpp"
+extern int yylex(void);
+extern int yylineno;
 
 // Variables globales
 SymbolTable symTable;

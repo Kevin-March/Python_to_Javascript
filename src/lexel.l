@@ -140,42 +140,29 @@ std::stack<int> _indent_stack;
 "or"        { PUSH_TOKEN((yylval.token = OR));}
 "return"    { PUSH_TOKEN((yylval.token = RETURN));}
 "while"     { PUSH_TOKEN((yylval.token = WHILE));}
-"True"      { yylval.str = new std::string("true", yyleng);
-              PUSH_TOKEN(TBOOLEAN);}
-"False"     { yylval.str = new std::string("false", yyleng);
-              PUSH_TOKEN(FBOOLEAN);}
-"for"       { PUSH_TOKEN((yylval.token = FOR));}
+"True"      { yylval.bool_val = true;
+              PUSH_TOKEN(BOOLEAN);}
+"False"     { yylval.bool_val = false;
+              PUSH_TOKEN(BOOLEAN);}
 "in"        { PUSH_TOKEN((yylval.token = IN));}
 "range"     { PUSH_TOKEN((yylval.token = RANGE));}
-"def"       { PUSH_TOKEN((yylval.token = DEF));}
 "print"     { PUSH_TOKEN((yylval.token = PRINT));}
 
-[A-Z][A-Z0-9_]*           {yylval.str = new std::string(yytext, yyleng);
+[A-Z][A-Z0-9_]*           {yylval.str = new std::string(yytext);
                           PUSH_TOKEN(CONSTANT);}
 
-[a-zA-Z_][a-zA-Z0-9_]*  {yylval.str = new std::string(yytext, yyleng);
+[a-zA-Z_][a-zA-Z0-9_]*  {yylval.str = new std::string(yytext);
                         PUSH_TOKEN(IDENTIFIER);}
 
--?[0-9]*\.[0-9]{1,7}   {yylval.str = new std::string(yytext, yyleng);
+-?[0-9]*\.[0-9]{1,7}   {yylval.float_val = atof(yytext);
                         PUSH_TOKEN(FLOAT);}
 
--?[0-9]*"."[0-9]+       {yylval.str = new std::string(yytext, yyleng);
-                        PUSH_TOKEN(DOUBLE);}
-
--?[0-9]+                {yylval.str = new std::string(yytext, yyleng);
+-?[0-9]+                {yylval.int_val = atoi(yytext);
                         PUSH_TOKEN(INTEGER);}
 
-(\"[^\"]+\")            {yylval.str = new std::string(yytext, yyleng);
+(\"[^\"]+\")            {yylval.str = new std::string(yytext);
                         PUSH_TOKEN(STRING);}
 
-(\'[^\']\')                  {yylval.str = new std::string(yytext, yyleng);
-                              PUSH_TOKEN(CHAR);}
-
-"="         { PUSH_TOKEN((yylval.token = EQUALS));} 
-"+"         { PUSH_TOKEN((yylval.token = PLUS));}
-"-"         {  PUSH_TOKEN((yylval.token = MINUS)); }
-"*"         {  PUSH_TOKEN((yylval.token = TIMES));}
-"/"         {  PUSH_TOKEN((yylval.token = DIVIDEDBY));}
 "=="        { PUSH_TOKEN((yylval.token = EQ));}
 "!="        { PUSH_TOKEN((yylval.token = NEQ));}
 ">"         { PUSH_TOKEN((yylval.token = GT));}
@@ -188,6 +175,9 @@ std::stack<int> _indent_stack;
 ":"         { PUSH_TOKEN((yylval.token = COLON));}
 "["         { PUSH_TOKEN((yylval.token = LBRACK));}
 "]"         { PUSH_TOKEN((yylval.token = RBRACK));}
+
+"+"         { PUSH_TOKEN((yylval.token = PLUS));}
+"-"         { PUSH_TOKEN((yylval.token = MINUS));}
 
 .           { PUSH_TOKEN((yylval.token = UNKNOWN));}
 
