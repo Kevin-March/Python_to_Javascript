@@ -30,156 +30,208 @@ std::string translateExpression(const std::string& pyExpr);
 %token EQ NEQ LT GT LTE GTE
 %token PLUS MINUS MULT DIV MOD
 %token LBRACK RBRACK LPAREN RPAREN COMMA COLON
-%token INTEGER FLOAT STRING BOOLEAN IDENTIFIER
+%token IN RANGE
+
+%token <str> IDENTIFIER STRING
+%token <int_val> INTEGER
+%token <float_val> FLOAT
+%token <bool_val> BOOLEAN
 %token VAR CONST TYPE_INT TYPE_FLOAT TYPE_STR TYPE_BOOL TYPE_ARRAY
 
-%type <str> expression term factor comparison logical_expr
-%type <str> var_declaration function_call array_literal
-%type <str> if_statement for_loop while_loop function_def
+%type <str> program statement function_body block
+%type <str> var_declaration function_def params
+%type <str> if_statement else_clause for_loop while_loop
+%type <str> expression term factor array_literal elements
+%type <str> function_call arguments comparison logical_expr
 
 %start program
 
 %%
 
 program:
-    /* vacío */
-    | program statement
+    /* vacío */ { $$ = new std::string(""); }
+    | program statement { $$ = new std::string(*$1 + *$2); delete $1; delete $2; }
     ;
 
 statement:
-      var_declaration
-    | function_def
-    | if_statement
-    | for_loop
-    | while_loop
-    | expression NEWLINE { jsCode << $1 << ";\n"; }
-    | RETURN expression NEWLINE { jsCode << "return " << $2 << ";\n"; }
-    ;
+      var_declaration { $$ = $1; }
+    | function_def { $$ = $1; }
+    | if_statement { $$ = $1; }
+    | for_loop { $$ = $1; }
+    | while_loop { $$ = $1; }
+    | expression NEWLINE {
+        jsCode << *$1 << ";\n";
+        $$ = new std::string(*$1 + ";\n");
+        delete $1;
+    }
+    | RETURN expression NEWLINE {
+        jsCode << "return " << *$2 << ";\n";
+        $$ = new std::string("return " + *$2 + ";\n");
+        delete $2;
+    }
 
 var_declaration:
     IDENTIFIER '=' expression NEWLINE {
         if (!symTable.exists(*$1)) {
             symTable.addSymbol(*$1, "auto");
         }
-        jsCode << "let " << *$1 << " = " << $3 << ";\n";
+        $$ = new std::string("let " + *$1 + " = " + *$3 + ";\n");
+        jsCode << *$$;
+        delete $1;
+        delete $3;
     }
     ;
 
 function_def:
     DEF IDENTIFIER '(' params ')' ':' NEWLINE INDENT function_body DEDENT {
-        jsCode << "function " << *$2 << "(" << $4 << ") {\n" << $8 << "}\n";
+        $$ = new std::string("function " + *$2 + "(" + *$4 + ") {\n" + *$9 + "}\n");
+        jsCode << *$$;
+        delete $2;
+        delete $4;
+        delete $9;
     }
+
+
+function_body:
+    statement { $$ = new std::string(*$1); delete $1; }
+    | function_body statement { $$ = new std::string(*$1 + *$2); delete $1; delete $2; }
     ;
 
 params:
-    /* vacío */ { $$ = ""; }
-    | IDENTIFIER { $$ = *$1; symTable.addSymbol(*$1, "param"); }
-    | params COMMA IDENTIFIER { $$ = $1 + ", " + *$3; symTable.addSymbol(*$3, "param"); }
+    /* vacío */ { $$ = new std::string(""); }
+    | IDENTIFIER { 
+        $$ = new std::string(*$1);
+        symTable.addSymbol(*$1, "param");
+        delete $1;
+      }
+    | params COMMA IDENTIFIER { 
+        $$ = new std::string(*$1 + ", " + *$3);
+        symTable.addSymbol(*$3, "param");
+        delete $1;
+        delete $3;
+      }
     ;
 
-function_body:
-    statement
-    | function_body statement
-    ;
 
 if_statement:
     IF expression ':' NEWLINE INDENT block DEDENT {
-        jsCode << "if (" << $2 << ") {\n" << $6 << "}\n";
+        $$ = new std::string("if (" + *$2 + ") {\n" + *$6 + "}\n");
+        jsCode << *$$;
+        delete $2;
+        delete $6;
     }
     | IF expression ':' NEWLINE INDENT block DEDENT else_clause {
-        jsCode << "if (" << $2 << ") {\n" << $6 << "} " << $8 << "\n";
+        $$ = new std::string("if (" + *$2 + ") {\n" + *$6 + "} " + *$8 + "\n");
+        jsCode << *$$;
+        delete $2;
+        delete $6;
+        delete $8;
     }
     ;
 
 else_clause:
     ELSE ':' NEWLINE INDENT block DEDENT {
-        $$ = "else {\n" + $5 + "}";
+        $$ = new std::string("else {\n" + *$5 + "}");
+        delete $5;
     }
     | ELIF expression ':' NEWLINE INDENT block DEDENT else_clause {
-        $$ = "else if (" + $2 + ") {\n" + $6 + "} " + $8;
+        $$ = new std::string("else if (" + *$2 + ") {\n" + *$6 + "} " + *$8);
+        delete $2;
+        delete $6;
+        delete $8;
     }
     ;
 
 for_loop:
     FOR IDENTIFIER IN IDENTIFIER ':' NEWLINE INDENT block DEDENT {
-        jsCode << "for (let " << *$2 << " of " << *$4 << ") {\n" << $8 << "}\n";
+        $$ = new std::string("for (let " + *$2 + " of " + *$4 + ") {\n" + *$8 + "}\n");
+        jsCode << *$$;
+        delete $2;
+        delete $4;
+        delete $8;
     }
     | FOR IDENTIFIER IN RANGE '(' INTEGER ')' ':' NEWLINE INDENT block DEDENT {
-        jsCode << "for (let " << *$2 << " = 0; " << *$2 << " < " << $6 << "; " 
-               << *$2 << "++) {\n" << $11 << "}\n";
+        $$ = new std::string("for (let " + *$2 + " = 0; " + *$2 + " < " + std::to_string($6) + "; " 
+               + *$2 + "++) {\n" + *$11 + "}\n");
+        jsCode << *$$;
+        delete $2;
+        delete $11;
     }
     ;
 
 while_loop:
     WHILE expression ':' NEWLINE INDENT block DEDENT {
-        jsCode << "while (" << $2 << ") {\n" << $6 << "}\n";
+        $$ = new std::string("while (" + *$2 + ") {\n" + *$6 + "}\n");
+        jsCode << *$$;
+        delete $2;
+        delete $6;
     }
     ;
 
 block:
-    statement
-    | block statement
+    statement { $$ = new std::string(*$1); delete $1; }
+    | block statement { $$ = new std::string(*$1 + *$2); delete $1; delete $2; }
     ;
 
 expression:
     term { $$ = $1; }
-    | expression PLUS term { $$ = $1 + " + " + $3; }
-    | expression MINUS term { $$ = $1 + " - " + $3; }
+    | expression PLUS term { $$ = new std::string(*$1 + " + " + *$3); delete $1; delete $3; }
+    | expression MINUS term { $$ = new std::string(*$1 + " - " + *$3); delete $1; delete $3; }
     ;
 
 term:
     factor { $$ = $1; }
-    | term MULT factor { $$ = $1 + " * " + $3; }
-    | term DIV factor { $$ = $1 + " / " + $3; }
-    | term MOD factor { $$ = $1 + " % " + $3; }
+    | term MULT factor { $$ = new std::string(*$1 + " * " + *$3); delete $1; delete $3; }
+    | term DIV factor { $$ = new std::string(*$1 + " / " + *$3); delete $1; delete $3; }
+    | term MOD factor { $$ = new std::string(*$1 + " % " + *$3); delete $1; delete $3; }
     ;
 
 factor:
-    INTEGER { $$ = std::to_string($1); }
-    | FLOAT { $$ = std::to_string($1); }
-    | STRING { $$ = *$1; }
-    | BOOLEAN { $$ = (*$1 == "True") ? "true" : "false"; }
-    | IDENTIFIER { $$ = *$1; }
-    | array_literal
-    | function_call
-    | '(' expression ')' { $$ = "(" + $2 + ")"; }
+    INTEGER { $$ = new std::string(std::to_string($1)); }
+    | FLOAT { $$ = new std::string(std::to_string($1)); }
+    | STRING { $$ = new std::string(*$1); delete $1; }
+    | BOOLEAN { $$ = new std::string((*$1 == "True") ? "true" : "false"); delete $1; }
+    | IDENTIFIER { $$ = new std::string(*$1); delete $1; }
+    | array_literal { $$ = $1; }
+    | function_call { $$ = $1; }
+    | '(' expression ')' { $$ = new std::string("(" + *$2 + ")"); delete $2; }
     ;
 
 array_literal:
-    LBRACK elements RBRACK { $$ = "[" + $2 + "]"; }
+    LBRACK elements RBRACK { $$ = new std::string("[" + *$2 + "]"); delete $2; }
     ;
 
 elements:
-    /* vacío */ { $$ = ""; }
+    /* vacío */ { $$ = new std::string(""); }
     | expression { $$ = $1; }
-    | elements COMMA expression { $$ = $1 + ", " + $3; }
+    | elements COMMA expression { $$ = new std::string(*$1 + ", " + *$3); delete $1; delete $3; }
     ;
 
 function_call:
-    IDENTIFIER '(' arguments ')' { $$ = *$1 + "(" + $3 + ")"; }
-    | PRINT '(' arguments ')' { $$ = "console.log(" + $3 + ")"; }
+    IDENTIFIER '(' arguments ')' { $$ = new std::string(*$1 + "(" + *$3 + ")"); delete $1; delete $3; }
+    | PRINT '(' arguments ')' { $$ = new std::string("console.log(" + *$3 + ")"); delete $3; }
     ;
 
 arguments:
-    /* vacío */ { $$ = ""; }
+    /* vacío */ { $$ = new std::string(""); }
     | expression { $$ = $1; }
-    | arguments COMMA expression { $$ = $1 + ", " + $3; }
+    | arguments COMMA expression { $$ = new std::string(*$1 + ", " + *$3); delete $1; delete $3; }
     ;
 
 comparison:
-    expression EQ expression { $$ = $1 + " === " + $3; }
-    | expression NEQ expression { $$ = $1 + " !== " + $3; }
-    | expression LT expression { $$ = $1 + " < " + $3; }
-    | expression GT expression { $$ = $1 + " > " + $3; }
-    | expression LTE expression { $$ = $1 + " <= " + $3; }
-    | expression GTE expression { $$ = $1 + " >= " + $3; }
+    expression EQ expression { $$ = new std::string(*$1 + " === " + *$3); delete $1; delete $3; }
+    | expression NEQ expression { $$ = new std::string(*$1 + " !== " + *$3); delete $1; delete $3; }
+    | expression LT expression { $$ = new std::string(*$1 + " < " + *$3); delete $1; delete $3; }
+    | expression GT expression { $$ = new std::string(*$1 + " > " + *$3); delete $1; delete $3; }
+    | expression LTE expression { $$ = new std::string(*$1 + " <= " + *$3); delete $1; delete $3; }
+    | expression GTE expression { $$ = new std::string(*$1 + " >= " + *$3); delete $1; delete $3; }
     ;
 
 logical_expr:
     comparison { $$ = $1; }
-    | logical_expr AND logical_expr { $$ = $1 + " && " + $3; }
-    | logical_expr OR logical_expr { $$ = $1 + " || " + $3; }
-    | NOT logical_expr { $$ = "!" + $2; }
+    | logical_expr AND logical_expr { $$ = new std::string(*$1 + " && " + *$3); delete $1; delete $3; }
+    | logical_expr OR logical_expr { $$ = new std::string(*$1 + " || " + *$3); delete $1; delete $3; }
+    | NOT logical_expr { $$ = new std::string("!" + *$2); delete $2; }
     ;
 
 %%
