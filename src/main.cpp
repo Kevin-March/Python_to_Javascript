@@ -18,7 +18,7 @@ int main(int argc, char const *argv[]) {
     }
 
     // Configurar archivo de salida (default: output.js)
-    std::string outputFilename = (argc > 2) ? argv[2] : "output.js";
+    std::string outputFilename = (argc > 2) ? ("output/" + std::string(argv[2])) : "output/output.js";
     std::ofstream output_file(outputFilename);
     
     if (!output_file.is_open()) {

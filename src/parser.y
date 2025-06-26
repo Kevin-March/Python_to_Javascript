@@ -98,21 +98,21 @@ statement
             // Construye la cadena de asignación para el output.c
             std::stringstream ss;
             if (type == "char"){ // Es una cadena char str[] = "GeeksforGeeks";
-                ss << type << " " << *$1 << "[] = " << *$3 << ";\n";
+                ss << "let " << *$1 << " = " << *$3 << ";\n";
                 $$ = new std::string(ss.str());
             }else if(type == "lista" && tipo_actual2 == 1){ // ES UN ARRAY INT
-                ss << "int " << *$1 << "[] = " << *$3 << ";\n";
+                ss << "let " << *$1 << " = " << *$3 << ";\n";
                 $$ = new std::string(ss.str());
             }else if(type == "lista" && tipo_actual2 == 2){ // ES UN ARRAY FLOAT
                 ss << "float " << *$1 << "[] = " << *$3 << ";\n";
                 $$ = new std::string(ss.str());
             }
             else if(type == "lista" && tipo_actual2 == 3){ // ES UN CHARACTER ARRAY
-                ss << "char " << *$1 << "[] = " << *$3 << ";\n";
+                ss << "let " << *$1 << " = " << *$3 << ";\n";
                 $$ = new std::string(ss.str());
             }
             else{
-                ss << type << " " << *$1 << " = " << *$3 << ";\n";
+                ss << "let " << *$1 << " = " << *$3 << ";\n";
                 $$ = new std::string(ss.str());
             }
 
@@ -160,20 +160,20 @@ statement
             std::stringstream ss;
             if(tipo_actual2 == 1){ 
                 type = "const int";
-                ss << "const int " << *$1 << " = " << *$3 << ";\n";
+                ss << "const " << *$1 << " = " << *$3 << ";\n";
                 $$ = new std::string(ss.str());
                 // Agrega el identificador a la tabla de símbolos con su tipo
                 symbol_table[*$1] = type;
             }else if(tipo_actual2 == 2){ 
                 type = "const float";
-                ss << "const float " << *$1 << " = " << *$3 << ";\n";
+                ss << "const " << *$1 << " = " << *$3 << ";\n";
                 $$ = new std::string(ss.str());
                 // Agrega el identificador a la tabla de símbolos con su tipo
                 symbol_table[*$1] = type;
             }
             else if(tipo_actual2 == 3){ 
                 type = "const char";
-                ss << "const char " << *$1 << " = " << *$3 << ";\n";
+                ss << "const " << *$1 << " = " << *$3 << ";\n";
                 $$ = new std::string(ss.str());
                 // Agrega el identificador a la tabla de símbolos con su tipo
                 symbol_table[*$1] = type;
@@ -196,7 +196,7 @@ statement
     | FOR IDENTIFIER IN RANGE LPAREN expression_for RPAREN COLON NEWLINE{
       // realizar verificacion, si es_id == 1, entonces verificar que su tipo sea int en la tabla de simbolos, sino error
       // verificar si ya se declaro o no la variable
-        $$ = new std::string("for (int " + *$2 + " = 0; " + *$2 + " <  " + *$6 + "; " + *$2 + "++) {\n"); 
+        $$ = new std::string("for (let " + *$2 + " = 0; " + *$2 + " < " + *$6 + "; " + *$2 + "++) {\n");
         delete $2; delete $6;
         //std::cerr << "Entro a FIR statement \n";
     }
@@ -241,29 +241,29 @@ statement
         std::string expressionStr = *$3;
             
         if (tipo_actual == 4) { // Es un STRING
-            printFormat = "printf(" + expressionStr + ");\n";
+            printFormat = "console.log(" + expressionStr + ");\n";
             //std::cerr << "Entro a es un string\n";   
         } else if (tipo_actual == 6) { // Es un IDENTIFIER
               //std::cerr << "Entro a es un ID \n";           
             if (symbol_table.find(expressionStr) != symbol_table.end()) {
                 std::string type = symbol_table[expressionStr];
                 if (type == "int" || type == "const int") {
-                    printFormat = "printf(\"%d\", " + expressionStr + ");\n";
+                    printFormat = "console.log(\"%d\", " + expressionStr + ");\n";
                 } else if (type == "float") {
-                    printFormat = "printf(\"%f\", " + expressionStr + ");\n";
+                    printFormat = "console.log(\"%f\", " + expressionStr + ");\n";
                 } else if (type == "double") {
-                    printFormat = "printf(\"%lf\", " + expressionStr + ");\n";
+                    printFormat = "console.log(\"%lf\", " + expressionStr + ");\n";
                 }else{
                   std::cerr << "WARNING: No se puede imprimir la variable \"" << expressionStr << "\"." << ". En linea: " << yylineno << std::endl;
-                  printFormat = "// printf(\"%?\", " + expressionStr + "); // Print no valido en C, revisar si afecta el flujo \n";
+                  printFormat = "// console.log(\"%?\", " + expressionStr + "); // Print no valido en C, revisar si afecta el flujo \n";
                 }
             } else {
                 std::cerr << "WARNING: Variable " << expressionStr << " no encontrada en la tabla de símbolos." << ". En linea: " << yylineno << std::endl;
-                printFormat = "// printf(\"%?\", " + expressionStr + "); // Print no valido en C, revisar si afecta el flujo \n";
+                printFormat = "// console.log(\"%?\", " + expressionStr + "); // Print no valido en C, revisar si afecta el flujo \n";
             }
         } else {
                   std::cerr << "WARNING: No se puede imprimir la variable \"" << expressionStr << "\"." << ". En linea: " << yylineno << std::endl;
-                  printFormat = "// printf(\"%?\", " + expressionStr + "); // Print no valido en C, revisar si afecta el flujo \n";
+                  printFormat = "// console.log(\"%?\", " + expressionStr + "); // Print no valido en C, revisar si afecta el flujo \n";
           }
         tipo_actual = 0;
         tipo_actual2 = 0;
