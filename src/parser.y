@@ -12,10 +12,12 @@ std::map<std::string, std::string> symbol_table; // Tabla de símbolos
 std::string* goalStr;
 std::string* functionDeclarationsStr;
 
+
+
 void yyerror(const char* err) {
   std::cerr << "Error de sintaxis: " << err << std::endl;
 }
-int yylex(YYSTYPE* yylval, YYLTYPE* yylloc);
+extern int yylex();
 extern int yylineno;
 
 int tipo_actual = 0;
@@ -31,9 +33,9 @@ int es_id = 0;
   int token;
 }
 
-%locations
 
-%define api.pure 
+
+
 
 
 %token <str> IDENTIFIER INTEGER TBOOLEAN FBOOLEAN FLOAT STRING CHAR DOUBLE CONSTANT

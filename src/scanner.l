@@ -23,17 +23,15 @@ Python Operators:
 #include <cstdlib>
 #include <string.h>
 #include "parser.hpp"
-YYSTYPE yylval;
-YYLTYPE yylloc;
+extern YYSTYPE yylval;
+extern YYLTYPE yylloc;
 
 
 int comment_start_line;
 std::stack<int> _indent_stack;
 %}
 
-%option reentrant
-%option bison-bridge
-%option bison-locations
+
 %option noyywrap
 %option yylineno
 %x COMMENT
