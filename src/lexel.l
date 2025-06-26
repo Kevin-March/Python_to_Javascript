@@ -23,7 +23,7 @@ Python Operators:
 #include <stack>
 #include <cstdlib>
 #include <string.h>
-#include "parser.hpp"
+#include "parser.tab.h"
 YYSTYPE yylval;
 YYLTYPE yylloc;
 
