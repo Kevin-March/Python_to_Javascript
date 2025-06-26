@@ -1,259 +1,385 @@
 %{
 #include <iostream>
-#include <string>
-#include <vector>
-#include <sstream>
-#include "symbol_table.hpp"
-#include "type_checker.hpp"
-extern int yylex(void);
+#include <map>
+#include <algorithm> // Incluir para std::find
+#include <cstring>
+#include <sstream> // Para usar std::stringstream
+#include <string>  // Para usar std::string
+
+#include "parser.hpp"
+
+std::map<std::string, std::string> symbol_table; // Tabla de símbolos
+std::string* goalStr;
+std::string* functionDeclarationsStr;
+
+void yyerror(const char* err) {
+  std::cerr << "Error de sintaxis: " << err << std::endl;
+}
+int yylex(YYSTYPE* yylval, YYLTYPE* yylloc);
 extern int yylineno;
 
-// Variables globales
-SymbolTable symTable;
-TypeChecker typeChecker(symTable);
-int currentScope = 0;
-std::stringstream jsCode;  // Acumula el código JavaScript generado
+int tipo_actual = 0;
+int tipo_actual2 = 0;
+int tipo_actual3 = 0;
+int es_id = 0;
 
-// Prototipos
-void yyerror(const char *s);
-std::string translateExpression(const std::string& pyExpr);
 %}
 
 %union {
-    std::string* str;
-    int int_val;
-    double float_val;
-    bool bool_val;
+  float value;
+  std::string* str;
+  int token;
 }
 
-%token INDENT DEDENT NEWLINE
-%token IF ELIF ELSE FOR WHILE BREAK CONTINUE
-%token DEF RETURN PRINT
-%token AND OR NOT
-%token EQ NEQ LT GT LTE GTE
-%token PLUS MINUS MULT DIV MOD
-%token LBRACK RBRACK LPAREN RPAREN COMMA COLON
-%token IN RANGE
+%locations
 
-%token <str> IDENTIFIER STRING
-%token <int_val> INTEGER
-%token <float_val> FLOAT
-%token <bool_val> BOOLEAN
-%token VAR CONST TYPE_INT TYPE_FLOAT TYPE_STR TYPE_BOOL TYPE_ARRAY
+%define api.pure 
 
-%type <str> program statement function_body block
-%type <str> var_declaration function_def params
-%type <str> if_statement else_clause for_loop while_loop
-%type <str> expression term factor array_literal elements
-%type <str> function_call arguments comparison logical_expr
 
-%start program
+%token <str> IDENTIFIER INTEGER TBOOLEAN FBOOLEAN FLOAT STRING CHAR DOUBLE CONSTANT
+%token <token> EQUALS PLUS MINUS TIMES DIVIDEDBY
+%token <token> EQ NEQ GT GTE LT LTE RETURN
+%token <token> INDENT DEDENT NEWLINE IF COLON
+%token <token> AND BREAK ELIF ELSE FOR IN RANGE NOT OR WHILE DEF
+%token <token> SEMICOLON LPAREN RPAREN COMMA LBRACK RBRACK
+%token <token> PRINT UNKNOWN
+
+
+%type <str> expression statement list elements expression_for parameter_list argument_list argument
+%type <str> conditional conditionalExpr ifelse
+%type <str> flowcontrol program
+
+%left PLUS MINUS 
+%left TIMES DIVIDEDBY
+
+%start goal
 
 %%
 
-program:
-    /* vacío */ { $$ = new std::string(""); }
-    | program statement { $$ = new std::string(*$1 + *$2); delete $1; delete $2; }
-    ;
+goal
+  : program { }
 
-statement:
-      var_declaration { $$ = $1; }
-    | function_def { $$ = $1; }
-    | if_statement { $$ = $1; }
-    | for_loop { $$ = $1; }
-    | while_loop { $$ = $1; }
-    | expression NEWLINE {
-        jsCode << *$1 << ";\n";
-        $$ = new std::string(*$1 + ";\n");
-        delete $1;
-    }
-    | RETURN expression NEWLINE {
-        jsCode << "return " << *$2 << ";\n";
-        $$ = new std::string("return " + *$2 + ";\n");
-        delete $2;
-    }
+program
+  : program statement {$$ = new std::string(*$1 + *$2);
+                      goalStr = new std::string(*$$);
+                      delete $1; delete $2; 
+                       }
+  | statement { $$ = new std::string(*$1); delete $1; }
+  ;
 
-var_declaration:
-    IDENTIFIER '=' expression NEWLINE {
-        if (!symTable.exists(*$1)) {
-            symTable.addSymbol(*$1, "auto");
+statement
+  : conditional {$$ = new std::string(*$1); delete $1;}
+  | DEDENT conditional statement DEDENT DEDENT { $$ = new std::string("} " + *$2 + "\n" + *$3 + "}\n}\n"); delete $2; delete $3; }
+  | DEDENT conditional statement DEDENT { $$ = new std::string("} " + *$2 + "\n" + *$3 + "}\n"); delete $2; delete $3; }
+  | DEDENT { $$ = new std::string("}\n"); }
+  | INDENT statement {$$ = new std::string("\t" + *$2); delete $2; }
+  /*| INDENT statement INDENT statement { std::cerr << "Error:"<< "Indentation error"<< std::endl; exit(1); delete $2; delete $4; }*/
+  | INDENT flowcontrol NEWLINE DEDENT DEDENT{ $$ = new std::string("break; \n}\n}\n"); delete $2; }
+  | IDENTIFIER EQUALS expression NEWLINE {
+        //std::cerr << "Entro a ID EQUALS statement \n";
+        // Si no existe el id, se genera una declaracion
+        if (symbol_table.find(*$1) == symbol_table.end()) {
+            // Determina el tipo del identificador
+            std::string type;
+            if (tipo_actual == 1 | tipo_actual == 6 ) type = "int";
+            else if (tipo_actual == 2) type = "float";
+            else if (tipo_actual == 3) type = "bool";
+            else if (tipo_actual == 4) type = "char";
+            else if (tipo_actual == 5) type = "lista";
+            else if (tipo_actual == 7) type = "double";
+            else {
+                std::cerr << "Error: Tipo no reconocido para el identificador '" << *$1 << "'. En linea: " << yylineno << std::endl;
+                exit(1);
+            }
+            // Agrega el identificador a la tabla de símbolos con su tipo
+            symbol_table[*$1] = type;
+            // Construye la cadena de asignación para el output.c
+            std::stringstream ss;
+            if (type == "char"){ // Es una cadena char str[] = "GeeksforGeeks";
+                ss << type << " " << *$1 << "[] = " << *$3 << ";\n";
+                $$ = new std::string(ss.str());
+            }else if(type == "lista" && tipo_actual2 == 1){ // ES UN ARRAY INT
+                ss << "int " << *$1 << "[] = " << *$3 << ";\n";
+                $$ = new std::string(ss.str());
+            }else if(type == "lista" && tipo_actual2 == 2){ // ES UN ARRAY FLOAT
+                ss << "float " << *$1 << "[] = " << *$3 << ";\n";
+                $$ = new std::string(ss.str());
+            }
+            else if(type == "lista" && tipo_actual2 == 3){ // ES UN CHARACTER ARRAY
+                ss << "char " << *$1 << "[] = " << *$3 << ";\n";
+                $$ = new std::string(ss.str());
+            }
+            else{
+                ss << type << " " << *$1 << " = " << *$3 << ";\n";
+                $$ = new std::string(ss.str());
+            }
+
+        } else { 
+          // MANEJO DE ASIGNACIONES A VARIABLES DE DISTINTOS TIPOS
+
+          // SI EL ID ES UN INT o UN FLOAT o un BOOL o un DOUBLE
+          if(symbol_table[*$1] == "int" | symbol_table[*$1] == "float" | symbol_table[*$1] == "bool" | symbol_table[*$1] == "double" ){
+
+              // Si la asignacion es a un INT, FLOAT, DOUBLE, BOOL (TRUE OR FALSE) --> la realizo sin prob
+              if(tipo_actual == 1 | tipo_actual == 2 | tipo_actual == 7 | tipo_actual == 3){
+                  $$ = new std::string(*$1 + " = " + *$3 + ";\n"); 
+              }else if(tipo_actual == 6 && tipo_actual3 == 0){ // Si la asignacion es a otro IDENTIFIER
+                  // Si la asignacion es a un INT, FLOAT, DOUBLE, BOOL (TRUE OR FALSE) --> la realizo sin prob
+                  if(symbol_table[*$3] == "int" | symbol_table[*$3] == "float"| symbol_table[*$3] == "double"| symbol_table[*$3] == "bool"){
+                    $$ = new std::string(*$1 + " = " + *$3 + ";\n"); }
+                  else{
+                    std::cerr << "WARNING: No se puede realizar la traduccion de esta asignacion en C"<< std::endl;
+                    $$ = new std::string("// " + *$1 + " = " + *$3 + "; // Asignacion no valida en C, revisar si afecta el flujo \n");
+                }
+              }else if(tipo_actual3 == 1 && tipo_actual != 4 && tipo_actual != 9){ // asignaciones a operaciones de suma resta etc
+                  $$ = new std::string(*$1 + " = " + *$3 + ";\n"); 
+                  tipo_actual3 = 0;
+              }
+              else{ 
+                  std::cerr << "WARNING: No se puede realizar la traduccion de esta asignacion en C"<< std::endl;
+                  $$ = new std::string("// " + *$1 + " = " + *$3 + "; // Asignacion no valida en C, revisar si afecta el flujo \n");
+              }
+
+          }else{
+              std::cerr << "WARNING: No se puede realizar la traduccion de esta asignacion en C"<< std::endl;
+              $$ = new std::string("// " + *$1 + " = " + *$3 + "; // Asignacion no valida en C, revisar si afecta el flujo \n");
+          }
         }
-        $$ = new std::string("let " + *$1 + " = " + *$3 + ";\n");
-        jsCode << *$$;
-        delete $1;
+        tipo_actual = 0;
+        tipo_actual2 = 0;
+        // Limpia la memoria de los punteros utilizados
+        delete $1; delete $3;
+    }
+    | CONSTANT EQUALS expression NEWLINE {
+        // Si no existe el id, se genera una declaracion
+        if (symbol_table.find(*$1) == symbol_table.end()) {
+            // Determina el tipo de la constante
+            std::string type;
+            std::stringstream ss;
+            if(tipo_actual2 == 1){ 
+                type = "const int";
+                ss << "const int " << *$1 << " = " << *$3 << ";\n";
+                $$ = new std::string(ss.str());
+                // Agrega el identificador a la tabla de símbolos con su tipo
+                symbol_table[*$1] = type;
+            }else if(tipo_actual2 == 2){ 
+                type = "const float";
+                ss << "const float " << *$1 << " = " << *$3 << ";\n";
+                $$ = new std::string(ss.str());
+                // Agrega el identificador a la tabla de símbolos con su tipo
+                symbol_table[*$1] = type;
+            }
+            else if(tipo_actual2 == 3){ 
+                type = "const char";
+                ss << "const char " << *$1 << " = " << *$3 << ";\n";
+                $$ = new std::string(ss.str());
+                // Agrega el identificador a la tabla de símbolos con su tipo
+                symbol_table[*$1] = type;
+            }
+            else{
+              std::cerr << "Error: Asignacion no valida a constante " << *$1 << ". En linea: " << yylineno << std::endl;
+            }
+            delete $1; delete $3;
+        }else{
+          // Si existe no se puede modificar
+          $$ = new std::string("// " + *$1 + " = " + *$3 + "; // Asignacion no valida en C, revisar si afecta el flujo \n");
+          std::cerr << "Error: Modificacion no valida a constante " << *$1 << ". En linea: " << yylineno << std::endl;
+          delete $1; delete $3;
+        }
+        tipo_actual = 0;
+        tipo_actual2 = 0;
+        // Limpia la memoria de los punteros utilizados
+        
+    }
+    | FOR IDENTIFIER IN RANGE LPAREN expression_for RPAREN COLON NEWLINE{
+      // realizar verificacion, si es_id == 1, entonces verificar que su tipo sea int en la tabla de simbolos, sino error
+      // verificar si ya se declaro o no la variable
+        $$ = new std::string("for (int " + *$2 + " = 0; " + *$2 + " <  " + *$6 + "; " + *$2 + "++) {\n"); 
+        delete $2; delete $6;
+        //std::cerr << "Entro a FIR statement \n";
+    }
+    | DEF IDENTIFIER LPAREN parameter_list RPAREN COLON NEWLINE {
+      std::string funcName = *$2;
+      //std::cerr << "Entro a DEF procedure \n";
+      // Verificar si la función ya existe en la tabla de símbolos
+      if (symbol_table.find(funcName) != symbol_table.end()) {
+          std::cerr << "Error: La función '" << funcName << "' ya ha sido declarada. Línea: " << @2.first_line << std::endl;
+          //YYERROR;
+      } else {
+          std::string funcDecl = "void " + funcName + "(" + *$4 + ");\n";
+          
+          // Guardar la función en la tabla de símbolos
+          symbol_table[funcName] = "function";
+
+          if (functionDeclarationsStr == nullptr) {
+              functionDeclarationsStr = new std::string(funcDecl);
+          } else {
+              *functionDeclarationsStr += funcDecl;
+          }
+          $$ = new std::string("// Se deberia trasladar esta declaracion fuera del main \nvoid " + funcName + "(" + *$4 + ") {\n");
+      }
+      delete $2; delete $4;
+    }
+    | IDENTIFIER LPAREN argument_list RPAREN NEWLINE{
+      std::string funcName = *$1;
+      //std::cerr << "Entro a llamada Proc \n";
+      //std::cerr << "argument list: " << *$3 << " \n";
+      if (symbol_table.find(funcName) == symbol_table.end()) {
+        std::cerr << "Error: La función '" << funcName << "' no ha sido declarada. Línea: " << @1.first_line << std::endl;
+        YYERROR;
+      } else {
+        //std::cerr << "Entro a la escritura de la llamada \n";
+        $$ = new std::string(*$1 + "(" + *$3 + ");\n");
+      }
+      delete $1; delete $3;
+    }
+    | PRINT LPAREN expression RPAREN NEWLINE{
+        //std::cerr << "Entro a PRINT \n";      
+        std::string printFormat;
+        std::string expressionStr = *$3;
+            
+        if (tipo_actual == 4) { // Es un STRING
+            printFormat = "printf(" + expressionStr + ");\n";
+            //std::cerr << "Entro a es un string\n";   
+        } else if (tipo_actual == 6) { // Es un IDENTIFIER
+              //std::cerr << "Entro a es un ID \n";           
+            if (symbol_table.find(expressionStr) != symbol_table.end()) {
+                std::string type = symbol_table[expressionStr];
+                if (type == "int" || type == "const int") {
+                    printFormat = "printf(\"%d\", " + expressionStr + ");\n";
+                } else if (type == "float") {
+                    printFormat = "printf(\"%f\", " + expressionStr + ");\n";
+                } else if (type == "double") {
+                    printFormat = "printf(\"%lf\", " + expressionStr + ");\n";
+                }else{
+                  std::cerr << "WARNING: No se puede imprimir la variable \"" << expressionStr << "\"." << ". En linea: " << yylineno << std::endl;
+                  printFormat = "// printf(\"%?\", " + expressionStr + "); // Print no valido en C, revisar si afecta el flujo \n";
+                }
+            } else {
+                std::cerr << "WARNING: Variable " << expressionStr << " no encontrada en la tabla de símbolos." << ". En linea: " << yylineno << std::endl;
+                printFormat = "// printf(\"%?\", " + expressionStr + "); // Print no valido en C, revisar si afecta el flujo \n";
+            }
+        } else {
+                  std::cerr << "WARNING: No se puede imprimir la variable \"" << expressionStr << "\"." << ". En linea: " << yylineno << std::endl;
+                  printFormat = "// printf(\"%?\", " + expressionStr + "); // Print no valido en C, revisar si afecta el flujo \n";
+          }
+        tipo_actual = 0;
+        tipo_actual2 = 0;
+        tipo_actual3 = 0;
+        $$ = new std::string(printFormat);
         delete $3;
     }
-    ;
-
-function_def:
-    DEF IDENTIFIER '(' params ')' ':' NEWLINE INDENT function_body DEDENT {
-        $$ = new std::string("function " + *$2 + "(" + *$4 + ") {\n" + *$9 + "}\n");
-        jsCode << *$$;
-        delete $2;
-        delete $4;
-        delete $9;
+    | UNKNOWN NEWLINE{
+      std::cerr << "Error: Simbolo desconocido: " << $1 << ". En linea: " << yylineno << std::endl;
+      std::cerr << "No se traslado a la traduccion " << std::endl;
     }
-
-
-function_body:
-    statement { $$ = new std::string(*$1); delete $1; }
-    | function_body statement { $$ = new std::string(*$1 + *$2); delete $1; delete $2; }
-    ;
-
-params:
-    /* vacío */ { $$ = new std::string(""); }
-    | IDENTIFIER { 
-        $$ = new std::string(*$1);
-        symTable.addSymbol(*$1, "param");
-        delete $1;
+    | error NEWLINE
+    {
+      std::cerr << "Error de sintaxis en la línea " << ". En linea: " << yylineno << std::endl;
+    }
+  ;
+  ;
+ parameter_list
+  : /* empty */ { $$ = new std::string(""); }
+  | IDENTIFIER { $$ = new std::string("int " + *$1); delete $1; }
+  | parameter_list COMMA IDENTIFIER {
+      $$ = new std::string(*$1 + ", int " + *$3);
+      delete $1; delete $3;
+    }
+  ;
+argument_list
+  : /* empty */
+    { $$ = new std::string(""); }
+  | argument
+    { $$ = $1; }
+  | argument_list COMMA argument
+    {
+      $$ = new std::string(*$1 + ", " + *$3);
+      delete $1; delete $3;
+    }
+  ;
+argument:
+    INTEGER { $$ = $1; }
+  | FLOAT { $$ = $1; }
+  | DOUBLE {  $$ = $1; }
+  | TBOOLEAN { $$ = $1; }
+  | FBOOLEAN { $$ = $1; }
+  | IDENTIFIER
+    {
+      if (symbol_table.find(*$1) == symbol_table.end()) {
+        std::cerr << "Error: La variable '" << *$1 << "' no ha sido declarada. Línea: " << @1.first_line << std::endl;
+        YYERROR;
+      } else {
+        $$ = $1;
       }
-    | params COMMA IDENTIFIER { 
-        $$ = new std::string(*$1 + ", " + *$3);
-        symTable.addSymbol(*$3, "param");
-        delete $1;
-        delete $3;
-      }
-    ;
-
-
-if_statement:
-    IF expression ':' NEWLINE INDENT block DEDENT {
-        $$ = new std::string("if (" + *$2 + ") {\n" + *$6 + "}\n");
-        jsCode << *$$;
-        delete $2;
-        delete $6;
     }
-    | IF expression ':' NEWLINE INDENT block DEDENT else_clause {
-        $$ = new std::string("if (" + *$2 + ") {\n" + *$6 + "} " + *$8 + "\n");
-        jsCode << *$$;
-        delete $2;
-        delete $6;
-        delete $8;
-    }
-    ;
+  ;
+expression
+  : INTEGER { tipo_actual = 1; tipo_actual2 = 1; $$ = $1; }
+  | FLOAT { tipo_actual = 2; tipo_actual2 = 2; $$ = $1; }
+  | DOUBLE { tipo_actual = 7; $$ = $1; }
+  | TBOOLEAN { tipo_actual = 3; $$ = $1; }
+  | FBOOLEAN { tipo_actual = 3; $$ = $1; }
+  | IDENTIFIER {tipo_actual = 6;$$ = $1; }
+  | CONSTANT {tipo_actual = 8;$$ = $1; }
+  | STRING {  tipo_actual = 4; $$ = $1; }
+  | CHAR {  tipo_actual = 9; tipo_actual2 = 3; $$ = $1; }
+  | LPAREN expression RPAREN {  $$ = new std::string("(" + *$2 + ")"); delete $2;}
+  | expression PLUS expression { tipo_actual3 = 1;$$ =  new std::string(*$1 + " + " + *$3); delete $1; delete $3;} 
+  | expression MINUS expression { tipo_actual3 = 1;$$ =  new std::string(*$1 + " - " + *$3); delete $1; delete $3;} 
+  | expression TIMES expression { tipo_actual3 = 1;$$ =  new std::string(*$1 + " * " + *$3); delete $1; delete $3;} 
+  | expression DIVIDEDBY expression { tipo_actual3 = 1;$$ =  new std::string(*$1 + " / " + *$3); delete $1; delete $3;}  
+  | list { tipo_actual = 5; $$ = $1; }                              
+  ;
+expression_for
+  : INTEGER { $$ = $1; }
+  | IDENTIFIER {es_id = 1; $$ = $1; }
+  ;
+list
+  : LBRACK RBRACK { $$ = new std::string("[]"); }
+  | LBRACK elements RBRACK { $$ = new std::string("{" + *$2 + "}"); delete $2; }
+  ;
+elements
+  : expression { $$ = new std::string(*$1); delete $1; }
+  | elements COMMA expression { $$ = new std::string(*$1 + ", " + *$3); delete $1; delete $3; }
+  ;
+conditionalExpr
+  : IDENTIFIER { $$ = $1; }
+  | INTEGER { $$ = $1; }
+  | FLOAT { $$ = $1; }
+  | TBOOLEAN { $$ = $1; }
+  | FBOOLEAN { $$ = $1; }
+  | STRING { $$ = $1; }
+  | conditionalExpr LT conditionalExpr { $$ = new std::string(*$1 + " < " + *$3);  delete $1; delete $3;}
+  | conditionalExpr GT conditionalExpr { 
+                                        $$ = new std::string(*$1 + " > " + *$3);
+                                        delete $1; delete $3;
+                                      }
+  | conditionalExpr LTE conditionalExpr {  $$ = new std::string(*$1 + " <= " + *$3); delete $1; delete $3;}
+  | conditionalExpr GTE conditionalExpr {  $$ = new std::string(*$1 + " >= " + *$3); delete $1; delete $3;}
+  | conditionalExpr NEQ conditionalExpr {  $$ = new std::string(*$1 + " != " + *$3); delete $1; delete $3;}
+  | conditionalExpr EQ conditionalExpr {  $$ = new std::string(*$1 + " == " + *$3); delete $1; delete $3;}
+  | AND conditionalExpr {  $$ = new std::string(" && " + *$2 ); delete $2;}
+  ;
 
-else_clause:
-    ELSE ':' NEWLINE INDENT block DEDENT {
-        $$ = new std::string("else {\n" + *$5 + "}");
-        delete $5;
-    }
-    | ELIF expression ':' NEWLINE INDENT block DEDENT else_clause {
-        $$ = new std::string("else if (" + *$2 + ") {\n" + *$6 + "} " + *$8);
-        delete $2;
-        delete $6;
-        delete $8;
-    }
-    ;
+conditional
+  : ifelse
+  | WHILE conditionalExpr COLON NEWLINE { $$ = new std::string("while (" + *$2 + ") {\n"); delete $2;}
+  ;
 
-for_loop:
-    FOR IDENTIFIER IN IDENTIFIER ':' NEWLINE INDENT block DEDENT {
-        $$ = new std::string("for (let " + *$2 + " of " + *$4 + ") {\n" + *$8 + "}\n");
-        jsCode << *$$;
-        delete $2;
-        delete $4;
-        delete $8;
-    }
-    | FOR IDENTIFIER IN RANGE '(' INTEGER ')' ':' NEWLINE INDENT block DEDENT {
-        $$ = new std::string("for (let " + *$2 + " = 0; " + *$2 + " < " + std::to_string($6) + "; " 
-               + *$2 + "++) {\n" + *$11 + "}\n");
-        jsCode << *$$;
-        delete $2;
-        delete $11;
-    }
-    ;
+ifelse
+  : IF conditionalExpr COLON NEWLINE {  $$ = new std::string("if(" + *$2 + ") {\n"); delete $2;}
+  | ELSE COLON NEWLINE { $$ = new std::string("else {\n");};
+  | ELIF conditionalExpr COLON NEWLINE {  $$ = new std::string("else if(" + *$2 + ") {"); delete $2;}
+  ;
 
-while_loop:
-    WHILE expression ':' NEWLINE INDENT block DEDENT {
-        $$ = new std::string("while (" + *$2 + ") {\n" + *$6 + "}\n");
-        jsCode << *$$;
-        delete $2;
-        delete $6;
-    }
-    ;
-
-block:
-    statement { $$ = new std::string(*$1); delete $1; }
-    | block statement { $$ = new std::string(*$1 + *$2); delete $1; delete $2; }
-    ;
-
-expression:
-    term { $$ = $1; }
-    | expression PLUS term { $$ = new std::string(*$1 + " + " + *$3); delete $1; delete $3; }
-    | expression MINUS term { $$ = new std::string(*$1 + " - " + *$3); delete $1; delete $3; }
-    ;
-
-term:
-    factor { $$ = $1; }
-    | term MULT factor { $$ = new std::string(*$1 + " * " + *$3); delete $1; delete $3; }
-    | term DIV factor { $$ = new std::string(*$1 + " / " + *$3); delete $1; delete $3; }
-    | term MOD factor { $$ = new std::string(*$1 + " % " + *$3); delete $1; delete $3; }
-    ;
-
-factor:
-    INTEGER { $$ = new std::string(std::to_string($1)); }
-    | FLOAT { $$ = new std::string(std::to_string($1)); }
-    | STRING { $$ = new std::string(*$1); delete $1; }
-    | BOOLEAN { $$ = new std::string((*$1 == "True") ? "true" : "false"); delete $1; }
-    | IDENTIFIER { $$ = new std::string(*$1); delete $1; }
-    | array_literal { $$ = $1; }
-    | function_call { $$ = $1; }
-    | '(' expression ')' { $$ = new std::string("(" + *$2 + ")"); delete $2; }
-    ;
-
-array_literal:
-    LBRACK elements RBRACK { $$ = new std::string("[" + *$2 + "]"); delete $2; }
-    ;
-
-elements:
-    /* vacío */ { $$ = new std::string(""); }
-    | expression { $$ = $1; }
-    | elements COMMA expression { $$ = new std::string(*$1 + ", " + *$3); delete $1; delete $3; }
-    ;
-
-function_call:
-    IDENTIFIER '(' arguments ')' { $$ = new std::string(*$1 + "(" + *$3 + ")"); delete $1; delete $3; }
-    | PRINT '(' arguments ')' { $$ = new std::string("console.log(" + *$3 + ")"); delete $3; }
-    ;
-
-arguments:
-    /* vacío */ { $$ = new std::string(""); }
-    | expression { $$ = $1; }
-    | arguments COMMA expression { $$ = new std::string(*$1 + ", " + *$3); delete $1; delete $3; }
-    ;
-
-comparison:
-    expression EQ expression { $$ = new std::string(*$1 + " === " + *$3); delete $1; delete $3; }
-    | expression NEQ expression { $$ = new std::string(*$1 + " !== " + *$3); delete $1; delete $3; }
-    | expression LT expression { $$ = new std::string(*$1 + " < " + *$3); delete $1; delete $3; }
-    | expression GT expression { $$ = new std::string(*$1 + " > " + *$3); delete $1; delete $3; }
-    | expression LTE expression { $$ = new std::string(*$1 + " <= " + *$3); delete $1; delete $3; }
-    | expression GTE expression { $$ = new std::string(*$1 + " >= " + *$3); delete $1; delete $3; }
-    ;
-
-logical_expr:
-    comparison { $$ = $1; }
-    | logical_expr AND logical_expr { $$ = new std::string(*$1 + " && " + *$3); delete $1; delete $3; }
-    | logical_expr OR logical_expr { $$ = new std::string(*$1 + " || " + *$3); delete $1; delete $3; }
-    | NOT logical_expr { $$ = new std::string("!" + *$2); delete $2; }
-    ;
+flowcontrol
+  : BREAK { $$ = new std::string("break"); }
+  ;
 
 %%
 
-void yyerror(const char *s) {
-    std::cerr << "Error de sintaxis: " << s << " en la línea " << yylineno << std::endl;
-}
-
-std::string translateExpression(const std::string& pyExpr) {
-    // Conversiones específicas Python→JS
-    if (pyExpr == "True") return "true";
-    if (pyExpr == "False") return "false";
-    if (pyExpr == "None") return "null";
-    return pyExpr;
-}
-
-int main() {
-    yyparse();
-    std::cout << "// Código generado:\n";
-    std::cout << jsCode.str();
-    return 0;
+void yyerror(YYLTYPE* loc, const char* err) {
+  std::cerr << "Error de sintaxis en la línea "  << yylineno << std::endl;
+  //exit(1);
 }

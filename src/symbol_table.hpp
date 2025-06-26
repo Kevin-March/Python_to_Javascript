@@ -1,5 +1,6 @@
 #include <unordered_map>
 #include <string>
+#pragma once
 
 class SymbolTable {
     std::unordered_map<std::string, std::string> symbols; // {nombre: tipo}
