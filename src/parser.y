@@ -13,7 +13,6 @@ std::string* goalStr;
 std::string* functionDeclarationsStr;
 
 
-
 void yyerror(const char* err) {
   std::cerr << "Error de sintaxis: " << err << std::endl;
 }
@@ -44,38 +43,236 @@ int es_id = 0;
 %token <token> INDENT DEDENT NEWLINE IF COLON
 %token <token> AND BREAK ELIF ELSE FOR IN RANGE NOT OR WHILE DEF
 %token <token> SEMICOLON LPAREN RPAREN COMMA LBRACK RBRACK
-%token <token> PRINT UNKNOWN
+%token <token> PRINT UNKNOWN ENDMARKER
 
 
 %type <str> expression statement list elements expression_for parameter_list argument_list argument
 %type <str> conditional conditionalExpr ifelse
-%type <str> flowcontrol program
+%type <str> flowcontrol 
+
+%type <str> program stmt_or_newline_list_opt stmt simple_stmt compound_stmt small_stmt_list_opt stmt_or_newline
 
 %left PLUS MINUS 
 %left TIMES DIVIDEDBY
 
-%start goal
+%start program
 
 %%
 
-goal
-  : program { }
-
 program
-  : program statement {$$ = new std::string(*$1 + *$2);
-                      goalStr = new std::string(*$$);
-                      delete $1; delete $2; 
-                       }
-  | statement { $$ = new std::string(*$1); delete $1; }
+  : stmt_or_newline_list_opt ENDMARKER { goalStr = new std::string(*$1); 
+                              delete $1; }
+
+stmt_or_newline_list_opt
+  : /* empty */ { $$ = new std::string(""); }
+  | stmt_or_newline_list_opt stmt_or_newline { $$ = new std::string(*$1 + "\n"+ *$2);
+                                    delete $1; delete $2; }
   ;
 
+stmt_or_newline
+  : stmt  
+  | NEWLINE
+  ;
+
+stmt
+  : simple_stmt
+  | compound_stmt
+  | global_stmt
+  ;
+
+simple_stmt
+  : small_stmt_list NEWLINE { $$ = new std::string($1 + ";")
+                              delete $1; }
+  ;
+
+
+small_stmt_list
+  : small_stmt_list SEMICOLON small_stmt { $$ = new std::string(*$1 + *$3);
+                                           delete $1; delete $2; }
+  | small_stmt SEMICOLON { $$ = $1 }
+  | small_stmt
+  ;
+
+small_stmt
+  : expr_stmt
+  | flow_stmt
+  ; 
+
+// TODO agregar manejo de scope
+// TODO especificar que solo se puede hacer una asignación (no se puede hacer a=b=c=3)
+expr_stmt
+  : test annasign { $$ = new std::string(*$1);              // No asigna
+                    delete $1; }
+  | test annasign EQUALS test { $$ = new std::string(*$1 + "=" + *$4);  // Asigna
+                    delete $1; delete $4; }
+  | test augassign test { $$ = new std::string(*$1 + *$2 + *$3);  // Asigna
+                    delete $1; delete $2; delete $3;}
+  | test EQUALS test { $$ = new std::string(*$1 + "=" + *$3);     // Asigna
+                    delete $1; delete $3;}
+  | test { $$ = new std::string("")}                              // No asigna
+  ;
+
+annasign
+  : COLON test { delete $2; } // Declaración de tipo que no se utiliza en JS
+  ;
+
+augassign
+  : PLUS EQUALS { $$ = new std::string("+=")}
+  | MINUS EQUALS { $$ = new std::string("-=")}
+  | TIMES EQUALS { $$ = new std::string("*=")}
+  | DIVIDEBY EQUALS { $$ = new std::string("/=")}
+  ;
+
+flow_stmt
+  : BREAK { $$ = new std::string("break"); }
+  | RETURN test { $$ = new std::string("return" + $2);
+                  delete $2; }
+  | RETURN { $$ = new std::string("return"); }
+  ;  
+
+compound_stmt
+  : if_stmt
+  | while_stmt
+  | for_stmt
+  | funcdef
+  ;
+
+if_stmt
+  : IF test COLON suite elif_clauses else_clause_opt
+      {
+        // base if
+        std::stringstream ss;
+        ss << "if (" << *$2 << ") {\n\t" << *$5 << "}\n";
+
+        // elif
+        if ($6) {
+          ss << *$6;
+          delete $6;
+        }
+
+        // else
+        if ($7) {
+          ss << *$7;
+          delete $7;
+        }
+
+        $$ = new std::string(ss.str());
+        delete $2; delete $5;
+      }
+  ;
+elif_clauses
+  : /* empty */ { $$ = nullptr; }
+  | elif_clauses ELIF test COLON NEWLINE suite
+      {
+        std::stringstream ss;
+        if ($1) {
+          ss << *$1;
+          delete $1;
+        }
+        ss << "else if (" << *$3 << ") {\n" << *$6 << "}\n";
+        $$ = new std::string(ss.str());
+        delete $3; delete $6;
+      }
+  ;
+
+
+else_clause_opt
+  : /* empty */ { $$ = nullptr; }
+  | ELSE COLON NEWLINE suite { $$ = new std::string("else {\n" + *$4 + "}\n"); delete $4; }
+  ;
+
+suite
+  : simple_stmt 
+  | NEWLINE INDENT stmt_list DEDENT
+
+stmt_list
+  : stmt
+  | stmt_list stmt { $$ = new std::string($1 +$2); 
+                     delete $1; delete $2; }
+;
+
+while_stmt
+  : WHILE test COLON suite 
+      {
+        std::stringstream ss;
+
+        // generar el while
+        ss << "while (" << *$2 << ") {\n" << *$4 << "}\n";
+
+        $$ = new std::string(ss.str());
+        delete $2;
+        delete $4;
+      }
+  ;
+for_stmt
+  : FOR IDENTIFIER IN test COLON suite
+      {
+        // esto es para "for x in lista"
+        std::stringstream ss;
+        ss << "for (let " << *$2 << " of " << *$4 << ") {\n"
+           << *$6 << "}\n";
+        $$ = new std::string(ss.str());
+        delete $2; delete $4; delete $6;
+      }
+  | FOR IDENTIFIER IN RANGE LPAREN expression RPAREN COLON suite
+      {
+        // esto es para "for x in range(n)"
+        std::stringstream ss;
+        ss << "for (let " << *$2 << " = 0; "
+           << *$2 << " < " << *$6 << "; " << *$2 << "++) {\n"
+           << *$9 << "}\n";
+        $$ = new std::string(ss.str());
+        delete $2; delete $6; delete $9;
+      }
+  ;
+funcdef
+  : DEF IDENTIFIER parameters return_type_opt COLON suite
+      {
+        std::stringstream ss;
+
+        // función en JavaScript con parámetros
+        ss << "function " << *$2 << *$3 << " {\n" << *$6 << "}\n";
+
+        // en JS no hay anotaciones de tipo de retorno, así que ignoramos $4
+        $$ = new std::string(ss.str());
+
+        delete $2; delete $3; delete $4; delete $6;
+      }
+  ;
+parameters
+  : LPAREN RPAREN { $$ = new std::string("()"); }
+  | LPAREN parameter_list RPAREN
+      {
+        $$ = new std::string("(" + *$2 + ")");
+        delete $2;
+      }
+  ;
+
+parameter_list
+  : IDENTIFIER { $$ = $1; }
+  | parameter_list COMMA IDENTIFIER
+      {
+        $$ = new std::string(*$1 + ", " + *$3);
+        delete $1; delete $3;
+      }
+  ;
+
+return_type_opt
+  : /* empty */ { /*En JavaScript no hay tipado de retorno, por eso solo parseamos, pero no lo incluimos en la salida. */ $$ = new std::string(""); }
+  | ARROW test { $$ = $2; }
+  ;
+
+
+
+
+/* CODIGO OBSOLETO 
 statement
   : conditional {$$ = new std::string(*$1); delete $1;}
   | DEDENT conditional statement DEDENT DEDENT { $$ = new std::string("} " + *$2 + "\n" + *$3 + "}\n}\n"); delete $2; delete $3; }
   | DEDENT conditional statement DEDENT { $$ = new std::string("} " + *$2 + "\n" + *$3 + "}\n"); delete $2; delete $3; }
   | DEDENT { $$ = new std::string("}\n"); }
   | INDENT statement {$$ = new std::string("\t" + *$2); delete $2; }
-  /*| INDENT statement INDENT statement { std::cerr << "Error:"<< "Indentation error"<< std::endl; exit(1); delete $2; delete $4; }*/
+  /*| INDENT statement INDENT statement { std::cerr << "Error:"<< "Indentation error"<< std::endl; exit(1); delete $2; delete $4; }
   | INDENT flowcontrol NEWLINE DEDENT DEDENT{ $$ = new std::string("break; \n}\n}\n"); delete $2; }
   | IDENTIFIER EQUALS expression NEWLINE {
         //std::cerr << "Entro a ID EQUALS statement \n";
@@ -282,7 +479,7 @@ statement
   ;
   ;
  parameter_list
-  : /* empty */ { $$ = new std::string(""); }
+  : /* empty  { $$ = new std::string(""); }
   | IDENTIFIER { $$ = new std::string("int " + *$1); delete $1; }
   | parameter_list COMMA IDENTIFIER {
       $$ = new std::string(*$1 + ", int " + *$3);
@@ -290,7 +487,7 @@ statement
     }
   ;
 argument_list
-  : /* empty */
+  : /* empty 
     { $$ = new std::string(""); }
   | argument
     { $$ = $1; }
@@ -378,7 +575,7 @@ ifelse
 flowcontrol
   : BREAK { $$ = new std::string("break"); }
   ;
-
+*/
 %%
 
 void yyerror(YYLTYPE* loc, const char* err) {

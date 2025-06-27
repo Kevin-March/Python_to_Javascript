@@ -110,7 +110,7 @@ std::stack<int> _indent_stack;
                 //std::cout << "DEDENT" << std::endl;
                 yylval.token = DEDENT; return DEDENT;
               }
-              return 0;
+              return ENDMARKER;
             }
 
 [ \t]       { /* Ignoramos espacios blancos que no sean los de arriba */ }
