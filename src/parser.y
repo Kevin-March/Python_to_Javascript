@@ -52,6 +52,10 @@ int es_id = 0;
 
 %type <str> program stmt_or_newline_list_opt stmt simple_stmt compound_stmt small_stmt_list_opt stmt_or_newline
 
+%type <str> test or_test and_test not_test comparison comp_op expr
+%type <str> arith_expr term factor power atom_expr atom
+%type <str> list testlist subscriptlist trailer subscript sliceop exprlist dictorsetmaker classdef argument arglist
+
 %left PLUS MINUS 
 %left TIMES DIVIDEDBY
 
@@ -262,7 +266,273 @@ return_type_opt
   | ARROW test { $$ = $2; }
   ;
 
+test
+    : or_test { $$ = $1; }
+    | or_test IF or_test ELSE test
+    {
+        $$ = new std::string("(" + *$3 + " ? " + *$1 + " : " + *$5 + ")");
+        delete $1; delete $3; delete $5;
+    }
+    ;
 
+or_test
+    : and_test { $$ = $1; }
+    | or_test OR and_test
+    {
+        $$ = new std::string("(" + *$1 + " || " + *$3 + ")");
+        delete $1; delete $3;
+    }
+    ;
+
+and_test
+    : not_test { $$ = $1; }
+    | and_test AND not_test
+    {
+        $$ = new std::string("(" + *$1 + " && " + *$3 + ")");
+        delete $1; delete $3;
+    }
+    ;
+
+not_test
+    : NOT not_test
+    {
+        $$ = new std::string("!(" + *$2 + ")");
+        delete $2;
+    }
+    | comparison { $$ = $1; }
+    ;
+
+comparison
+    : expr { $$ = $1; }
+    | comparison comp_op expr
+    {
+        $$ = new std::string("(" + *$1 + " " + *$2 + " " + *$3 + ")");
+        delete $1; delete $2; delete $3;
+    }
+    | comparison IN expr  // Manejo especial para 'in'
+    {
+        // JS: arrays → includes(), objetos → in
+        $$ = new std::string("(Array.isArray(" + *$3 + ") ? " + 
+                             *$3 + ".includes(" + *$1 + ") : " +
+                             "(" + *$1 + " in " + *$3 + "))");
+        delete $1; delete $3;
+    }
+    ;
+
+comp_op
+    : EQ { $$ = new std::string("==="); }
+    | NEQ { $$ = new std::string("!=="); }
+    | LT { $$ = new std::string("<"); }
+    | GT { $$ = new std::string(">"); }
+    | LTE { $$ = new std::string("<="); }
+    | GTE { $$ = new std::string(">="); }
+    | IN  { $$ = new std::string(" in "); }
+    ;
+
+expr
+    : arith_expr { $$ = $1; }
+    | expr '|' expr  // Bitwise OR (JS compatible)
+    {
+        $$ = new std::string("(" + *$1 + " | " + *$3 + ")");
+        delete $1; delete $3;
+    }
+    ;
+
+arith_expr
+    : term { $$ = $1; }
+    | arith_expr PLUS term
+    {
+        $$ = new std::string("(" + *$1 + " + " + *$3 + ")");
+        delete $1; delete $3;
+    }
+    | arith_expr MINUS term
+    {
+        $$ = new std::string("(" + *$1 + " - " + *$3 + ")");
+        delete $1; delete $3;
+    }
+    ;
+
+term
+    : factor { $$ = $1; }
+    | term TIMES factor
+    {
+        $$ = new std::string("(" + *$1 + " * " + *$3 + ")");
+        delete $1; delete $3;
+    }
+    | term DIV factor
+    {
+        $$ = new std::string("(" + *$1 + " / " + *$3 + ")");
+        delete $1; delete $3;
+    }
+    | term MOD factor
+    {
+        $$ = new std::string("(" + *$1 + " % " + *$3 + ")");
+        delete $1; delete $3;
+    }
+    | term '&' factor  // AND bitwise
+    {
+        $$ = new std::string("(" + *$1 + " & " + *$3 + ")");
+        delete $1; delete $3;
+    }
+    | term "<<" factor  // Shift left
+    {
+        $$ = new std::string("(" + *$1 + " << " + *$3 + ")");
+        delete $1; delete $3;
+    }
+    | term ">>" factor  // Shift right
+    {
+        $$ = new std::string("(" + *$1 + " >> " + *$3 + ")");
+        delete $1; delete $3;
+    }
+    | term "//" factor
+    {
+        $$ = new std::string("Math.floor(" + *$1 + " / " + *$3 + ")");
+        delete $1; delete $3;
+    }
+    ;
+
+factor
+    : PLUS factor { $$ = $2; }
+    | MINUS factor %prec UMINUS
+    {
+        $$ = new std::string("-(" + *$2 + ")");
+        delete $2;
+    }
+    | power { $$ = $1; }
+    ;
+
+power
+    : atom { $$ = $1; }
+    | power '**' factor
+    {
+        $$ = new std::string("(" + *$1 + " ** " + *$3 + ")");
+        delete $1; delete $3;
+    }
+    ;
+
+atom_expr
+    : atom { $$ = $1; }
+    | AWAIT atom { $$ = new std::string("await " + *$2); delete $2; }
+    | atom trailer { 
+        $$ = new std::string(*$1 + *$2); 
+        delete $1; delete $2;
+    }
+    ;
+
+atom
+    : IDENTIFIER { 
+        // Verificar existencia en tabla de símbolos
+        if (symbol_table[current_scope.back()].find(*$1) == symbol_table[current_scope.back()].end()) {
+            yyerror(("Variable no declarada: " + *$1).c_str());
+        }
+        $$ = $1;
+    }
+    | INTEGER { $$ = new std::string(std::to_string($1)); }
+    | FLOAT { $$ = new std::string(std::to_string($1)); }
+    | STRING { $$ = $1; }
+    | BOOLEAN { $$ = new std::string($1 ? "true" : "false"); }
+    | NONE { $$ = new std::string("null"); }
+    | list { $$ = $1; }
+    | func_call { $$ = $1; }
+    | LPAREN expr RPAREN { $$ = new std::string("(" + *$2 + ")"); delete $2; }
+    ;
+
+list
+    : LBRACK testlist RBRACK 
+    { 
+        $$ = new std::string("[" + *$2 + "]"); 
+        delete $2;
+    }
+    ;
+
+testlist
+    : /* vacío */ { $$ = new std::string(""); }
+    | test { $$ = $1; }
+    | testlist COMMA test 
+    { 
+        $$ = new std::string(*$1 + ", " + *$3); 
+        delete $1; delete $3;
+    }
+    ;
+
+trailer
+    : '(' ')' { $$ = new std::string("()"); }
+    | '(' arglist ')' { $$ = new std::string("(" + *$2 + ")"); delete $2; }
+    | '[' subscriptlist ']' { $$ = new std::string("[" + *$2 + "]"); delete $2; }
+    | '.' NAME { $$ = new std::string("." + *$2); delete $2; }
+    ;
+
+subscriptlist
+    : subscript { $$ = $1; }
+    | subscriptlist ',' subscript { 
+        $$ = new std::string(*$1 + ", " + *$3); 
+        delete $1; delete $3;
+    }
+    ;
+
+subscript
+    : test { $$ = $1; }
+    | ':' test { $$ = new std::string(":" + *$2); delete $2; }
+    | test ':' test { 
+        $$ = new std::string(*$1 + ":" + *$3); 
+        delete $1; delete $3;
+    }
+    | test ':' test sliceop {
+        $$ = new std::string(*$1 + ":" + *$3 + *$4); 
+        delete $1; delete $3; delete $4;
+    }
+    ;
+
+sliceop
+    : ':' { $$ = new std::string(":"); }
+    | ':' test { $$ = new std::string(":" + *$2); delete $2; }
+    ;
+
+exprlist
+    : expr { $$ = $1; }
+    | star_expr { $$ = $1; }
+    | exprlist ',' expr { 
+        $$ = new std::string(*$1 + ", " + *$3); 
+        delete $1; delete $3;
+    }
+    ;
+
+dictorsetmaker
+    : test ':' test { $$ = new std::string(*$1 + ": " + *$3); delete $1; delete $3; }
+    | test { $$ = $1; }
+    | dictorsetmaker ',' test ':' test { 
+        $$ = new std::string(*$1 + ", " + *$3 + ": " + *$5); 
+        delete $1; delete $3; delete $5;
+    }
+    ;
+
+classdef
+    : 'class' NAME ':' suite {
+        $$ = new std::string("class " + *$2 + " {\n" + *$4 + "}"); 
+        delete $2; delete $4;
+    }
+    | 'class' NAME '(' arglist ')' ':' suite {
+        $$ = new std::string("class " + *$2 + " extends " + *$4 + " {\n" + *$7 + "}"); 
+        delete $2; delete $4; delete $7;
+    }
+    ;
+
+argument
+    : test { $$ = $1; }
+    | test '=' test { 
+        $$ = new std::string(*$1 + " = " + *$3); 
+        delete $1; delete $3;
+    }
+    ;
+
+arglist
+    : /* vacío */ { $$ = new std::string(""); }
+    | expr { $$ = $1; }
+    | arglist COMMA expr { 
+        $$ = new std::string(*$1 + ", " + *$3); 
+        delete $1; delete $3;
+    }
+    ;
 
 
 /* CODIGO OBSOLETO 
