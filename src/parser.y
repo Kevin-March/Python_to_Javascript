@@ -18,8 +18,13 @@ std::vector<std::string> current_scope;
 extern int yylex();
 extern int yylineno;
 
+
+
 void yyerror(const char* err) {
-  std::cerr << "Error de sintaxis: " << err << " en la línea " << yylineno << std::endl;
+  extern int yychar;
+  std::cerr << "Error de sintaxis: " << err << " en la línea " << yylineno;
+  std::cerr << " (token: " << yychar << ")";
+  std::cerr << std::endl;
 }
 
 int tipo_actual = 0;
@@ -35,7 +40,7 @@ int es_id = 0;
   int token;
 }
 
-
+%define parse.error verbose
 
 
 
@@ -52,14 +57,14 @@ int es_id = 0;
 %token <token> ARROW
 %token <token> MOD
 %token <token> NONE
-%token <token> NAME
+
 
 %type <str> parameter_list 
 %type <str> small_stmt expr_stmt
 
 /* %type <str> flowcontrol */
 
-%type <str> program stmt_or_newline_list_opt stmt simple_stmt compound_stmt small_stmt_list stmt_or_newline
+%type <str> program stmt_list_opt stmt simple_stmt compound_stmt small_stmt_list 
 
 %type <str> test or_test and_test not_test comparison comp_op expr
 %type <str> arith_expr term factor power atom_expr atom
@@ -85,35 +90,33 @@ int es_id = 0;
 %%
 
 program
-  : stmt_or_newline_list_opt ENDMARKER { goalStr = new std::string(*$1); 
+  : stmt_list_opt { goalStr = new std::string(*$1); 
                               delete $1; }
-
-stmt_or_newline_list_opt
-  : /* empty */ { $$ = new std::string(""); }
-  | stmt_or_newline_list_opt stmt_or_newline { $$ = new std::string(*$1 + "\n"+ *$2);
-                                    delete $1; delete $2; }
   ;
 
-stmt_or_newline
-  : stmt  
-  | NEWLINE { $$ = new std::string("\n"); }
+stmt_list_opt
+  : /* empty */ { $$ = new std::string(""); }
+  | stmt_list_opt stmt { $$ = new std::string(*$1 + "\n"+ *$2);
+                                    delete $1; delete $2; }
   ;
 
 stmt
   : simple_stmt
   | compound_stmt
-  /*| global_stmt  descomentar luego*/
+  | NEWLINE { $$ = new std::string(""); }
   ;
 
 simple_stmt
   : small_stmt_list NEWLINE { $$ = new std::string(*$1 + ";");
+                              delete $1; }
+  | small_stmt_list { $$ = new std::string(*$1 + ";");
                               delete $1; }
   ;
 
 
 small_stmt_list
   : small_stmt_list SEMICOLON small_stmt { $$ = new std::string(*$1 + *$3);
-                                           delete $1; /*delete $2; verificar luego con gabriel */}
+                                           delete $1; delete $3;}
   | small_stmt SEMICOLON { $$ = $1; }
   | small_stmt
   ;
@@ -126,15 +129,73 @@ small_stmt
 // TODO agregar manejo de scope
 // TODO especificar que solo se puede hacer una asignación (no se puede hacer a=b=c=3)
 expr_stmt
-  : test annasign { $$ = new std::string(*$1);              // No asigna
-                    delete $1; }
-  | test annasign EQUALS test { $$ = new std::string(*$1 + "=" + *$4);  // Asigna
-                    delete $1; delete $4; }
-  | test augassign test { $$ = new std::string(*$1 + *$2 + *$3);  // Asigna
-                    delete $1; delete $2; delete $3;}
-  | test EQUALS test { $$ = new std::string(*$1 + "=" + *$3);     // Asigna
-                    delete $1; delete $3;}
-  | test { $$ = new std::string("");}                              // No asigna
+  : IDENTIFIER EQUALS test
+      {
+        if (symbol_table[current_scope.back()].count(*$1) == 0) {
+            // no estaba declarada
+            symbol_table[current_scope.back()][*$1] = "variable";
+            $$ = new std::string("let " + *$1 + " = " + *$3 + ";");
+        } else {
+            // ya estaba declarada
+            $$ = new std::string(*$1 + " = " + *$3);
+        }
+        delete $1;
+        delete $3;
+      }
+  | IDENTIFIER annasign EQUALS test
+      {
+         if (symbol_table[current_scope.back()].count(*$1) == 0) {
+            // no estaba declarada
+            symbol_table[current_scope.back()][*$1] = "variable";
+            $$ = new std::string("let " + *$1 + " = " + *$4 + ";");
+        } else {
+            // ya estaba declarada
+            $$ = new std::string(*$1 + " = " + *$4);
+        }
+        delete $1; delete $4;
+      }
+  | IDENTIFIER 
+      {
+        if (symbol_table[current_scope.back()].count(*$1) == 0) {
+            // no estaba declarada
+            symbol_table[current_scope.back()][*$1] = "variable";
+            $$ = new std::string("let " + *$1);
+        } else {
+            // ya estaba declarada
+            $$ = new std::string(*$1);
+        }
+        delete $1;
+      }
+  | IDENTIFIER annasign
+      {
+        if (symbol_table[current_scope.back()].count(*$1) == 0) {
+            // no estaba declarada
+            symbol_table[current_scope.back()][*$1] = "variable";
+            $$ = new std::string("let " + *$1 );
+        } else {
+            // ya estaba declarada
+            $$ = new std::string(*$1);
+        }
+        delete $1;
+      }
+  | IDENTIFIER augassign test
+      {
+        if (symbol_table[current_scope.back()].count(*$1) == 0) {
+            // no estaba declarada
+            symbol_table[current_scope.back()][*$1] = "variable";
+            $$ = new std::string("let " + *$1 + " = " + *$3 + ";");
+        } else {
+            // ya estaba declarada
+            $$ = new std::string(*$1 + " = " + *$3);
+        }
+        delete $1;
+        delete $3;
+      }
+  /*| test
+      {
+        $$ = $1;
+      }
+  */
   ;
 
 annasign
@@ -216,7 +277,7 @@ stmt_list
   : stmt
   | stmt_list stmt { $$ = new std::string(*$1 +*$2); 
                      delete $1; delete $2; }
-;
+  ;
 
 while_stmt
   : WHILE test COLON suite 
@@ -290,238 +351,234 @@ return_type_opt
   ;
 
 test
-    : or_test { $$ = $1; }
-    | or_test IF or_test ELSE test
-    {
-        $$ = new std::string("(" + *$3 + " ? " + *$1 + " : " + *$5 + ")");
-        delete $1; delete $3; delete $5;
-    }
-    ;
+  : or_test { $$ = $1; }
+  | or_test IF or_test ELSE test
+  {
+      $$ = new std::string("(" + *$3 + " ? " + *$1 + " : " + *$5 + ")");
+      delete $1; delete $3; delete $5;
+  }
+  ;
 
 or_test
-    : and_test { $$ = $1; }
-    | or_test OR and_test
-    {
-        $$ = new std::string("(" + *$1 + " || " + *$3 + ")");
-        delete $1; delete $3;
-    }
-    ;
+  : and_test { $$ = $1; }
+  | or_test OR and_test
+  {
+      $$ = new std::string("(" + *$1 + " || " + *$3 + ")");
+      delete $1; delete $3;
+  }
+  ;
 
 and_test
-    : not_test { $$ = $1; }
-    | and_test AND not_test
-    {
-        $$ = new std::string("(" + *$1 + " && " + *$3 + ")");
-        delete $1; delete $3;
-    }
-    ;
+  : not_test { $$ = $1; }
+  | and_test AND not_test
+  {
+      $$ = new std::string("(" + *$1 + " && " + *$3 + ")");
+      delete $1; delete $3;
+  }
+  ;
 
 not_test
-    : NOT not_test
-    {
-        $$ = new std::string("!(" + *$2 + ")");
-        delete $2;
-    }
-    | comparison { $$ = $1; }
-    ;
+  : NOT not_test
+  {
+      $$ = new std::string("!(" + *$2 + ")");
+      delete $2;
+  }
+  | comparison { $$ = $1; }
+  ;
 
 comparison
-    : expr { $$ = $1; }
-    | comparison comp_op expr
-    {
-        $$ = new std::string("(" + *$1 + " " + *$2 + " " + *$3 + ")");
-        delete $1; delete $2; delete $3;
-    }
-    | comparison IN expr  // Manejo especial para 'in'
-    {
-        // JS: arrays → includes(), objetos → in
-        $$ = new std::string("(Array.isArray(" + *$3 + ") ? " + 
-                             *$3 + ".includes(" + *$1 + ") : " +
-                             "(" + *$1 + " in " + *$3 + "))");
-        delete $1; delete $3;
-    }
-    ;
+  : expr { $$ = $1; }
+  | comparison comp_op expr
+  {
+      $$ = new std::string("(" + *$1 + " " + *$2 + " " + *$3 + ")");
+      delete $1; delete $2; delete $3;
+  }
+  | comparison IN expr  // Manejo especial para 'in'
+  {
+      // JS: arrays → includes(), objetos → in
+      $$ = new std::string("(Array.isArray(" + *$3 + ") ? " + 
+                            *$3 + ".includes(" + *$1 + ") : " +
+                            "(" + *$1 + " in " + *$3 + "))");
+      delete $1; delete $3;
+  }
+  ;
 
 comp_op
-    : EQ { $$ = new std::string("==="); }
-    | NEQ { $$ = new std::string("!=="); }
-    | LT { $$ = new std::string("<"); }
-    | GT { $$ = new std::string(">"); }
-    | LTE { $$ = new std::string("<="); }
-    | GTE { $$ = new std::string(">="); }
-    ;
+  : EQ { $$ = new std::string("==="); }
+  | NEQ { $$ = new std::string("!=="); }
+  | LT { $$ = new std::string("<"); }
+  | GT { $$ = new std::string(">"); }
+  | LTE { $$ = new std::string("<="); }
+  | GTE { $$ = new std::string(">="); }
+  ;
 
 expr
-    : arith_expr { $$ = $1; }
-    | expr '|' expr  // Bitwise OR (JS compatible)
-    {
-        $$ = new std::string("(" + *$1 + " | " + *$3 + ")");
-        delete $1; delete $3;
-    }
-    ;
+  : arith_expr { $$ = $1; }
+  | expr '|' expr  // Bitwise OR (JS compatible)
+  {
+      $$ = new std::string("(" + *$1 + " | " + *$3 + ")");
+      delete $1; delete $3;
+  }
+  ;
 
 arith_expr
-    : term { $$ = $1; }
-    | arith_expr PLUS term
-    {
-        $$ = new std::string("(" + *$1 + " + " + *$3 + ")");
-        delete $1; delete $3;
-    }
-    | arith_expr MINUS term
-    {
-        $$ = new std::string("(" + *$1 + " - " + *$3 + ")");
-        delete $1; delete $3;
-    }
-    ;
+  : term { $$ = $1; }
+  | arith_expr PLUS term
+  {
+      $$ = new std::string("(" + *$1 + " + " + *$3 + ")");
+      delete $1; delete $3;
+  }
+  | arith_expr MINUS term
+  {
+      $$ = new std::string("(" + *$1 + " - " + *$3 + ")");
+      delete $1; delete $3;
+  }
+  ;
 
 term
-    : factor { $$ = $1; }
-    | term TIMES factor
-    {
-        $$ = new std::string("(" + *$1 + " * " + *$3 + ")");
-        delete $1; delete $3;
-    }
-    | term DIVIDEDBY factor
-    {
-        $$ = new std::string("(" + *$1 + " / " + *$3 + ")");
-        delete $1; delete $3;
-    }
-    | term MOD factor
-    {
-        $$ = new std::string("(" + *$1 + " % " + *$3 + ")");
-        delete $1; delete $3;
-    }
-    | term '&' factor  // AND bitwise
-    {
-        $$ = new std::string("(" + *$1 + " & " + *$3 + ")");
-        delete $1; delete $3;
-    }
-    | term "<<" factor  // Shift left
-    {
-        $$ = new std::string("(" + *$1 + " << " + *$3 + ")");
-        delete $1; delete $3;
-    }
-    | term ">>" factor  // Shift right
-    {
-        $$ = new std::string("(" + *$1 + " >> " + *$3 + ")");
-        delete $1; delete $3;
-    }
-    | term "//" factor
-    {
-        $$ = new std::string("Math.floor(" + *$1 + " / " + *$3 + ")");
-        delete $1; delete $3;
-    }
-    ;
+  : factor { $$ = $1; }
+  | term TIMES factor
+  {
+      $$ = new std::string("(" + *$1 + " * " + *$3 + ")");
+      delete $1; delete $3;
+  }
+  | term DIVIDEDBY factor
+  {
+      $$ = new std::string("(" + *$1 + " / " + *$3 + ")");
+      delete $1; delete $3;
+  }
+  | term MOD factor
+  {
+      $$ = new std::string("(" + *$1 + " % " + *$3 + ")");
+      delete $1; delete $3;
+  }
+  | term '&' factor  // AND bitwise
+  {
+      $$ = new std::string("(" + *$1 + " & " + *$3 + ")");
+      delete $1; delete $3;
+  }
+  | term "<<" factor  // Shift left
+  {
+      $$ = new std::string("(" + *$1 + " << " + *$3 + ")");
+      delete $1; delete $3;
+  }
+  | term ">>" factor  // Shift right
+  {
+      $$ = new std::string("(" + *$1 + " >> " + *$3 + ")");
+      delete $1; delete $3;
+  }
+  | term "//" factor
+  {
+      $$ = new std::string("Math.floor(" + *$1 + " / " + *$3 + ")");
+      delete $1; delete $3;
+  }
+  ;
 
 factor
-    : PLUS factor { $$ = $2; }
-    | MINUS factor %prec UMINUS
-    {
-        $$ = new std::string("-(" + *$2 + ")");
-        delete $2;
-    }
-    | power { $$ = $1; }
-    ;
+  : PLUS factor { $$ = $2; }
+  | MINUS factor %prec UMINUS
+  {
+      $$ = new std::string("-(" + *$2 + ")");
+      delete $2;
+  }
+  | power { $$ = $1; }
+  ;
 
 power
-    : atom_expr { $$ = $1; }
-    | atom_expr POW factor
-    {
-        $$ = new std::string("(" + *$1 + " ** " + *$3 + ")");
-        delete $1; delete $3;
-    }
-    ;
+  : atom_expr { $$ = $1; }
+  | atom_expr POW factor
+  {
+      $$ = new std::string("(" + *$1 + " ** " + *$3 + ")");
+      delete $1; delete $3;
+  }
+  ;
 
 atom_expr
-    : atom { $$ = $1; }
-    | atom trailer { 
-        $$ = new std::string(*$1 + *$2); 
-        delete $1; delete $2;
-    }
-    ;
+  : atom { $$ = $1; }
+  | atom trailer { 
+      $$ = new std::string(*$1 + *$2); 
+      delete $1; delete $2;
+  }
+  ;
 
 atom
-    : IDENTIFIER { 
-        // Verificar existencia en tabla de símbolos
-        if (symbol_table[current_scope.back()].find(*$1) == symbol_table[current_scope.back()].end()) {
-            yyerror(("Variable no declarada: " + *$1).c_str());
-        }
-        $$ = $1;
-    }
-    | INTEGER { $$ = $1; }
-    | FLOAT { $$ = $1; }
-    | STRING { $$ = $1; }
-    | BOOLEAN { $$ = new std::string($1 ? "true" : "false"); }
-    | NONE { $$ = new std::string("null"); }
-    | list { $$ = $1; }
-    | LPAREN expr RPAREN { $$ = new std::string("(" + *$2 + ")"); delete $2; }
-    ;
+  : IDENTIFIER { 
+      $$ = $1;
+  }
+  | INTEGER { $$ = $1; }
+  | FLOAT { $$ = $1; }
+  | STRING { $$ = $1; }
+  | BOOLEAN { $$ = new std::string($1 ? "true" : "false"); }
+  | NONE { $$ = new std::string("null"); }
+  | list { $$ = $1; }
+  | LPAREN expr RPAREN { $$ = new std::string("(" + *$2 + ")"); delete $2; }
+  ;
 
 list
-    : LBRACK testlist RBRACK 
-    { 
-        $$ = new std::string("[" + *$2 + "]"); 
-        delete $2;
-    }
-    ;
+  : LBRACK testlist RBRACK 
+  { 
+      $$ = new std::string("[" + *$2 + "]"); 
+      delete $2;
+  }
+  ;
 
 testlist
-    : /* vacío */ { $$ = new std::string(""); }
-    | test { $$ = $1; }
-    | testlist COMMA test 
-    { 
-        $$ = new std::string(*$1 + ", " + *$3); 
-        delete $1; delete $3;
-    }
-    ;
+  : /* vacío */ { $$ = new std::string(""); }
+  | test { $$ = $1; }
+  | testlist COMMA test 
+  { 
+      $$ = new std::string(*$1 + ", " + *$3); 
+      delete $1; delete $3;
+  }
+  ;
 
 trailer
-    : '(' ')' { $$ = new std::string("()"); }
-    | '(' arglist ')' { $$ = new std::string("(" + *$2 + ")"); delete $2; }
-    | '[' subscriptlist ']' { $$ = new std::string("[" + *$2 + "]"); delete $2; }
-    | '.' IDENTIFIER { $$ = new std::string("." + *$2); delete $2; }
-    ;
+  : '(' ')' { $$ = new std::string("()"); }
+  | '(' arglist ')' { $$ = new std::string("(" + *$2 + ")"); delete $2; }
+  | '[' subscriptlist ']' { $$ = new std::string("[" + *$2 + "]"); delete $2; }
+  | '.' IDENTIFIER { $$ = new std::string("." + *$2); delete $2; }
+  ;
 
 subscriptlist
-    : subscript { $$ = $1; }
-    | subscriptlist ',' subscript { 
-        $$ = new std::string(*$1 + ", " + *$3); 
-        delete $1; delete $3;
-    }
-    ;
+  : subscript { $$ = $1; }
+  | subscriptlist ',' subscript { 
+      $$ = new std::string(*$1 + ", " + *$3); 
+      delete $1; delete $3;
+  }
+  ;
 
 subscript
-    : test { $$ = $1; }
-    | ':' test { $$ = new std::string(":" + *$2); delete $2; }
-    | test ':' test { 
-        $$ = new std::string(*$1 + ":" + *$3); 
-        delete $1; delete $3;
-    }
-    | test ':' test sliceop {
-        $$ = new std::string(*$1 + ":" + *$3 + *$4); 
-        delete $1; delete $3; delete $4;
-    }
-    ;
+  : test { $$ = $1; }
+  | ':' test { $$ = new std::string(":" + *$2); delete $2; }
+  | test ':' test { 
+      $$ = new std::string(*$1 + ":" + *$3); 
+      delete $1; delete $3;
+  }
+  | test ':' test sliceop {
+      $$ = new std::string(*$1 + ":" + *$3 + *$4); 
+      delete $1; delete $3; delete $4;
+  }
+  ;
 
 sliceop
-    : ':' { $$ = new std::string(":"); }
-    | ':' test { $$ = new std::string(":" + *$2); delete $2; }
-    ;
+  : ':' { $$ = new std::string(":"); }
+  | ':' test { $$ = new std::string(":" + *$2); delete $2; }
+  ;
 
 argument
-    : test { $$ = $1; }
-    | test '=' test { 
-        $$ = new std::string(*$1 + " = " + *$3); 
-        delete $1; delete $3;
-    }
-    ;
+  : test { $$ = $1; }
+  | test '=' test { 
+      $$ = new std::string(*$1 + " = " + *$3); 
+      delete $1; delete $3;
+  }
+  ;
 
 arglist
-    : argument { $$ = new std::string(*$1);
-                 delete $1;}
-    | arglist COMMA argument { $$ = new std::string(*$1 + ", " + *$3);
-                 delete $1; delete $3;}
-    ;
+  : argument { $$ = new std::string(*$1);
+                delete $1;}
+  | arglist COMMA argument { $$ = new std::string(*$1 + ", " + *$3);
+                delete $1; delete $3;}
+  ;
 %%
 
 

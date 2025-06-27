@@ -103,15 +103,8 @@ std::stack<int> _indent_stack;
             }
 
 <<EOF>>     {
-              /**/
-              while(_indent_stack.top() != 0) {
-                _indent_stack.pop();
-                //std::cout << "DEDENT" << std::endl;
-                yylval.token = DEDENT; return DEDENT;
-              }
-              return ENDMARKER;
+              return 0;
             }
-[a-zA-Z_][a-zA-Z0-9_]*  { yylval.str = new std::string(yytext, yyleng); return NAME; }
 
 [ \t]       { /* Ignoramos espacios blancos que no sean los de arriba */ }
 
