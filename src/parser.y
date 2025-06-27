@@ -5,7 +5,7 @@
 #include <cstring>
 #include <sstream> // Para usar std::stringstream
 #include <string>  // Para usar std::string
-
+#include <vector>
 #include "parser.hpp"
 
 std::map<std::string, std::map<std::string, std::string>> symbol_table; // Tabla de símbolos
@@ -63,7 +63,7 @@ int es_id = 0;
 
 %type <str> test or_test and_test not_test comparison comp_op expr
 %type <str> arith_expr term factor power atom_expr atom
-%type <str> list testlist subscriptlist trailer subscript sliceop exprlist dictorsetmaker classdef argument arglist
+%type <str> list testlist subscriptlist trailer subscript sliceop argument arglist
 
 /*faltantes*/
 %type <str> augassign
@@ -79,7 +79,7 @@ int es_id = 0;
 
 %left PLUS MINUS 
 %left TIMES DIVIDEDBY
-
+%right UMINUS
 %start program
 
 %%
@@ -96,7 +96,7 @@ stmt_or_newline_list_opt
 
 stmt_or_newline
   : stmt  
-  | NEWLINE
+  | NEWLINE { $$ = new std::string("\n"); }
   ;
 
 stmt
@@ -208,7 +208,9 @@ else_clause_opt
 
 suite
   : simple_stmt 
-  | NEWLINE INDENT stmt_list DEDENT
+  | NEWLINE INDENT stmt_list DEDENT { $$ = new std::string(*$3);
+                                      delete $3;}
+  ;
 
 stmt_list
   : stmt
@@ -347,7 +349,6 @@ comp_op
     | GT { $$ = new std::string(">"); }
     | LTE { $$ = new std::string("<="); }
     | GTE { $$ = new std::string(">="); }
-    | IN  { $$ = new std::string(" in "); }
     ;
 
 expr
@@ -423,8 +424,8 @@ factor
     ;
 
 power
-    : atom { $$ = $1; }
-    | power POW factor
+    : atom_expr { $$ = $1; }
+    | atom_expr POW factor
     {
         $$ = new std::string("(" + *$1 + " ** " + *$3 + ")");
         delete $1; delete $3;
@@ -507,34 +508,6 @@ sliceop
     | ':' test { $$ = new std::string(":" + *$2); delete $2; }
     ;
 
-exprlist
-    : expr { $$ = $1; }
-    | exprlist ',' expr { 
-        $$ = new std::string(*$1 + ", " + *$3); 
-        delete $1; delete $3;
-    }
-    ;
-
-dictorsetmaker
-    : test ':' test { $$ = new std::string(*$1 + ": " + *$3); delete $1; delete $3; }
-    | test { $$ = $1; }
-    | dictorsetmaker ',' test ':' test { 
-        $$ = new std::string(*$1 + ", " + *$3 + ": " + *$5); 
-        delete $1; delete $3; delete $5;
-    }
-    ;
-
-classdef
-    : CLASS IDENTIFIER ':' suite {
-        $$ = new std::string("class " + *$2 + " {\n" + *$4 + "}"); 
-        delete $2; delete $4;
-    }
-    | CLASS IDENTIFIER '(' arglist ')' ':' suite {
-        $$ = new std::string("class " + *$2 + " extends " + *$4 + " {\n" + *$7 + "}"); 
-        delete $2; delete $4; delete $7;
-    }
-    ;
-
 argument
     : test { $$ = $1; }
     | test '=' test { 
@@ -544,14 +517,11 @@ argument
     ;
 
 arglist
-    : /* vacío */ { $$ = new std::string(""); }
-    | expr { $$ = $1; }
-    | arglist COMMA expr { 
-        $$ = new std::string(*$1 + ", " + *$3); 
-        delete $1; delete $3;
-    }
+    : argument { $$ = new std::string(*$1);
+                 delete $1;}
+    | arglist COMMA argument { $$ = new std::string(*$1 + ", " + *$3);
+                 delete $1; delete $3;}
     ;
-
 %%
 
 

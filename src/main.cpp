@@ -2,6 +2,8 @@
 #include <fstream>
 #include <map>
 #include "parser.hpp"
+#include <vector>
+#include <string>
 
 extern int yylex();
 extern FILE* yyin;                         
@@ -9,8 +11,13 @@ extern int yyparse();
 extern std::map<std::string, std::string> symbol_table;
 extern std::string* goalStr;
 extern std::string* functionDeclarationsStr;
+extern std::vector<std::string> current_scope;
 
 int main(int argc, char const *argv[]) {
+    
+    // Inicializa el scope global para que no esté vacío
+    current_scope.push_back("global");
+
     // Verificar argumentos de línea de comandos
     if (argc < 2) {
         std::cerr << "Uso: " << argv[0] << " <archivo_entrada.py> [archivo_salida.js]" << std::endl;

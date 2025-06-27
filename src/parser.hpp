@@ -105,7 +105,7 @@ extern int yydebug;
     MOD = 306,                     /* MOD  */
     NONE = 307,                    /* NONE  */
     NAME = 308,                    /* NAME  */
-    UMINUS = 312                   /* UMINUS  */
+    UMINUS = 309                   /* UMINUS  */
   };
   typedef enum yytokentype yytoken_kind_t;
 #endif
