@@ -56,49 +56,56 @@ extern int yydebug;
     YYUNDEF = 257,                 /* "invalid token"  */
     IDENTIFIER = 258,              /* IDENTIFIER  */
     INTEGER = 259,                 /* INTEGER  */
-    TBOOLEAN = 260,                /* TBOOLEAN  */
-    FBOOLEAN = 261,                /* FBOOLEAN  */
-    FLOAT = 262,                   /* FLOAT  */
-    STRING = 263,                  /* STRING  */
-    CHAR = 264,                    /* CHAR  */
-    DOUBLE = 265,                  /* DOUBLE  */
-    CONSTANT = 266,                /* CONSTANT  */
-    EQUALS = 267,                  /* EQUALS  */
-    PLUS = 268,                    /* PLUS  */
-    MINUS = 269,                   /* MINUS  */
-    TIMES = 270,                   /* TIMES  */
-    DIVIDEDBY = 271,               /* DIVIDEDBY  */
-    EQ = 272,                      /* EQ  */
-    NEQ = 273,                     /* NEQ  */
-    GT = 274,                      /* GT  */
-    GTE = 275,                     /* GTE  */
-    LT = 276,                      /* LT  */
-    LTE = 277,                     /* LTE  */
-    RETURN = 278,                  /* RETURN  */
-    INDENT = 279,                  /* INDENT  */
-    DEDENT = 280,                  /* DEDENT  */
-    NEWLINE = 281,                 /* NEWLINE  */
-    IF = 282,                      /* IF  */
-    COLON = 283,                   /* COLON  */
-    AND = 284,                     /* AND  */
-    BREAK = 285,                   /* BREAK  */
-    ELIF = 286,                    /* ELIF  */
-    ELSE = 287,                    /* ELSE  */
-    FOR = 288,                     /* FOR  */
-    IN = 289,                      /* IN  */
-    RANGE = 290,                   /* RANGE  */
-    NOT = 291,                     /* NOT  */
-    OR = 292,                      /* OR  */
-    WHILE = 293,                   /* WHILE  */
-    DEF = 294,                     /* DEF  */
-    SEMICOLON = 295,               /* SEMICOLON  */
-    LPAREN = 296,                  /* LPAREN  */
-    RPAREN = 297,                  /* RPAREN  */
-    COMMA = 298,                   /* COMMA  */
-    LBRACK = 299,                  /* LBRACK  */
-    RBRACK = 300,                  /* RBRACK  */
-    PRINT = 301,                   /* PRINT  */
-    UNKNOWN = 302                  /* UNKNOWN  */
+    BOOLEAN = 260,                 /* BOOLEAN  */
+    FLOAT = 261,                   /* FLOAT  */
+    STRING = 262,                  /* STRING  */
+    CHAR = 263,                    /* CHAR  */
+    DOUBLE = 264,                  /* DOUBLE  */
+    CONSTANT = 265,                /* CONSTANT  */
+    EQUALS = 266,                  /* EQUALS  */
+    PLUS = 267,                    /* PLUS  */
+    MINUS = 268,                   /* MINUS  */
+    TIMES = 269,                   /* TIMES  */
+    DIVIDEDBY = 270,               /* DIVIDEDBY  */
+    EQ = 271,                      /* EQ  */
+    NEQ = 272,                     /* NEQ  */
+    GT = 273,                      /* GT  */
+    GTE = 274,                     /* GTE  */
+    LT = 275,                      /* LT  */
+    LTE = 276,                     /* LTE  */
+    RETURN = 277,                  /* RETURN  */
+    INDENT = 278,                  /* INDENT  */
+    DEDENT = 279,                  /* DEDENT  */
+    NEWLINE = 280,                 /* NEWLINE  */
+    IF = 281,                      /* IF  */
+    COLON = 282,                   /* COLON  */
+    AND = 283,                     /* AND  */
+    BREAK = 284,                   /* BREAK  */
+    ELIF = 285,                    /* ELIF  */
+    ELSE = 286,                    /* ELSE  */
+    FOR = 287,                     /* FOR  */
+    IN = 288,                      /* IN  */
+    RANGE = 289,                   /* RANGE  */
+    NOT = 290,                     /* NOT  */
+    OR = 291,                      /* OR  */
+    WHILE = 292,                   /* WHILE  */
+    DEF = 293,                     /* DEF  */
+    SEMICOLON = 294,               /* SEMICOLON  */
+    LPAREN = 295,                  /* LPAREN  */
+    RPAREN = 296,                  /* RPAREN  */
+    COMMA = 297,                   /* COMMA  */
+    LBRACK = 298,                  /* LBRACK  */
+    RBRACK = 299,                  /* RBRACK  */
+    PRINT = 300,                   /* PRINT  */
+    UNKNOWN = 301,                 /* UNKNOWN  */
+    ENDMARKER = 302,               /* ENDMARKER  */
+    POW = 303,                     /* POW  */
+    CLASS = 304,                   /* CLASS  */
+    ARROW = 305,                   /* ARROW  */
+    MOD = 306,                     /* MOD  */
+    NONE = 307,                    /* NONE  */
+    NAME = 308,                    /* NAME  */
+    UMINUS = 312                   /* UMINUS  */
   };
   typedef enum yytokentype yytoken_kind_t;
 #endif
@@ -107,13 +114,13 @@ extern int yydebug;
 #if ! defined YYSTYPE && ! defined YYSTYPE_IS_DECLARED
 union YYSTYPE
 {
-#line 30 "parser.y"
+#line 32 "parser.y"
 
   float value;
   std::string* str;
   int token;
 
-#line 117 "parser.hpp"
+#line 124 "parser.hpp"
 
 };
 typedef union YYSTYPE YYSTYPE;
@@ -121,23 +128,9 @@ typedef union YYSTYPE YYSTYPE;
 # define YYSTYPE_IS_DECLARED 1
 #endif
 
-/* Location type.  */
-#if ! defined YYLTYPE && ! defined YYLTYPE_IS_DECLARED
-typedef struct YYLTYPE YYLTYPE;
-struct YYLTYPE
-{
-  int first_line;
-  int first_column;
-  int last_line;
-  int last_column;
-};
-# define YYLTYPE_IS_DECLARED 1
-# define YYLTYPE_IS_TRIVIAL 1
-#endif
-
 
 extern YYSTYPE yylval;
-extern YYLTYPE yylloc;
+
 
 int yyparse (void);
 
