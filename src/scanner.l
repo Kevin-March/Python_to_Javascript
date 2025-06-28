@@ -24,7 +24,6 @@ Python Operators:
 #include <string.h>
 #include "parser.hpp"
 extern YYSTYPE yylval;
-extern YYLTYPE yylloc;
 
 
 int comment_start_line;
@@ -104,11 +103,12 @@ std::stack<int> _indent_stack;
             }
 
 <<EOF>>     {
-              /**/
-              while(_indent_stack.top() != 0) {
-                _indent_stack.pop();
-                //std::cout << "DEDENT" << std::endl;
-                yylval.token = DEDENT; return DEDENT;
+              if (_indent_stack.top() != 0) {
+                while (!_indent_stack.empty() && _indent_stack.top() != 0) {
+                  _indent_stack.pop();
+                  yylval.token = DEDENT;
+                  return DEDENT;
+                }
               }
               return 0;
             }
@@ -126,8 +126,8 @@ std::stack<int> _indent_stack;
 "or"        { yylval.token = OR; return OR; }
 "return"    { yylval.token = RETURN; return RETURN; }
 "while"     { yylval.token = WHILE; return WHILE; }
-"True"      { yylval.str = new std::string("true"); return TBOOLEAN; }
-"False"     { yylval.str = new std::string("false"); return FBOOLEAN; }
+"True"      { yylval.str = new std::string("true"); return BOOLEAN; }
+"False"     { yylval.str = new std::string("false"); return BOOLEAN; }
 "for"       { yylval.token = FOR; return FOR; }
 "in"        { yylval.token = IN; return IN; }
 "range"     { yylval.token = RANGE; return RANGE; }
@@ -172,7 +172,11 @@ std::stack<int> _indent_stack;
 ":"         { yylval.token = COLON; return COLON; }
 "["         { yylval.token = LBRACK; return LBRACK; }
 "]"         { yylval.token = RBRACK; return RBRACK; }
-
+"**"        { yylval.token = POW; return POW; }
+"class"     { yylval.token = CLASS; return CLASS; }
+"->"        { yylval.token = ARROW; return ARROW; }
+"%"         { yylval.token= MOD; return MOD; }
+"None"      { yylval.token = NONE; return NONE; }
 .           { yylval.token = UNKNOWN; return UNKNOWN; }
 
 %%
