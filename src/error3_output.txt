@@ -1,0 +1,38 @@
+[stmt_list_opt] vacío
+atom -> STRING: "esta es una cadena"
+atom_expr -> atom: "esta es una cadena"
+[power] atom_expr evaluado
+[factor] power evaluado
+[term] factor evaluado
+[arith_expr] term evaluado
+[expr] arith_expr evaluado
+[comparison] expr evaluado
+[not_test] comparison evaluado
+[and_test] not_test evaluado
+[or_test] and_test evaluado
+[test] or_test evaluado
+[expr_stmt] Asignación a variable: a
+  Variable NO declarada previamente. Declarando...
+[stmt_list_opt] agregando stmt
+atom -> INTEGER: 2
+atom_expr -> atom: 2
+[power] atom_expr evaluado
+[factor] power evaluado
+[term] factor evaluado
+atom -> INTEGER: 3
+atom_expr -> atom: 3
+[power] atom_expr evaluado
+[factor] power evaluado
+[term] Multiplicación detectada
+[arith_expr] term evaluado
+[expr] arith_expr evaluado
+[comparison] expr evaluado
+[not_test] comparison evaluado
+[and_test] not_test evaluado
+[or_test] and_test evaluado
+[test] or_test evaluado
+[expr_stmt] Asignación a variable: z
+  Variable NO declarada previamente. Declarando...
+[stmt_list_opt] agregando stmt
+Error de sintaxis: syntax error, unexpected EQUALS, expecting IDENTIFIER en la línea 4 (token: 266)
+Error durante la traducción

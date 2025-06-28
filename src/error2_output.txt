@@ -1,0 +1,23 @@
+[stmt_list_opt] vacío
+[id_declared] variable de for detectada y declarada: i
+atom -> INTEGER: 5
+atom_expr -> atom: 5
+[power] atom_expr evaluado
+[factor] power evaluado
+[term] factor evaluado
+[arith_expr] term evaluado
+[expr] arith_expr evaluado
+atom -> ( EXPR ): 5
+atom_expr -> atom: (5)
+[power] atom_expr evaluado
+[factor] power evaluado
+[term] factor evaluado
+[arith_expr] term evaluado
+[expr] arith_expr evaluado
+[comparison] expr evaluado
+[not_test] comparison evaluado
+[and_test] not_test evaluado
+[or_test] and_test evaluado
+[test] or_test evaluado
+Error de sintaxis: syntax error, unexpected COLON, expecting RPAREN or COMMA en la línea 1 (token: 282)
+Error durante la traducción

@@ -103,6 +103,13 @@ std::stack<int> _indent_stack;
             }
 
 <<EOF>>     {
+              if (_indent_stack.top() != 0) {
+                while (!_indent_stack.empty() && _indent_stack.top() != 0) {
+                  _indent_stack.pop();
+                  yylval.token = DEDENT;
+                  return DEDENT;
+                }
+              }
               return 0;
             }
 
