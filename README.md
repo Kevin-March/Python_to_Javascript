@@ -4,6 +4,10 @@
 Este proyecto implementa un transpiler que convierte código Python en JavaScript, usando Flex/Bison para análisis léxico y sintáctico. Permite traducir constructos básicos de Python (declaraciones, expresiones, estructuras de control y funciones) a sintaxis equivalente en JS.
 
 ## Uso
+1. moverse a la carpeta src:
+  ```
+   cd src
+  ```
 1. Generar analizadores:
    ```bash
    bison -d -o parser.cpp parser.y
